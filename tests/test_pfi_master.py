@@ -148,11 +148,10 @@ def run(args):
         #     pred_df.iloc[:, s] = preds
         # ## ----------------------------------------------------------------------
 
-        # pred_df.to_csv(os.path.join(tempdir, 'col.' + str(col) + '.csv'), sep='\t', index=False)
         pred_df.to_csv(os.path.join(tempdir, 'col.' + str('-'.join(col_set)) + '.csv'), sep='\t', index=False)
 
         fi_var.loc[i, 'cols'] = ','.join(col_set)  # col
-        fi_var.loc[i, 'imp'] = pred_df.std(axis=1).mean()
+        fi_var.loc[i, 'imp'] = pred_df.var(axis=1).mean()
 
     fi_var['imp'] = fi_var['imp'] / fi_var['imp'].sum()
     fi_var = fi_var.sort_values('imp', ascending=False).reset_index(drop=True)
