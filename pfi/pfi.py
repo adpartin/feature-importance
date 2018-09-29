@@ -43,16 +43,6 @@ class PFI:
         
         self.n_shuffles = n_shuffles
 
-        # def set_model(self, model):
-        #     self.model = model
-        #
-        # def set_data(self, xdata, ydata):
-        #     self.xdata = xdata.copy()
-        #     self.ydata = ydata.copy()
-        #
-        # def set_n_shuffles(self, n_shuffles):
-        #     self.n_shuffles = n_shuffles
-
 
     def _shuf_cols(self, df, col_set, seed=None):
         """ Shuffle a group of cols only once and return the updated df.
@@ -65,7 +55,6 @@ class PFI:
         df = df.copy()
         df[col_set] = df[col_set].sample(n=df.shape[0], axis=0,
                                          replace=False, random_state=seed).values
-        # df[col_set] = np.random.permutation(df[col_set])
         return df
 
 
@@ -93,28 +82,28 @@ class PFI:
         return pred_df
 
 
-    def _get_col_sets_to_use(self, col_sets):
-        """ col_cets is a list of lists (each list contains col names). """
-        cols_unq_req = set()  # set of unique cols that were requested
-        for col_set in col_sets:  # get the unique cols that were passed in col_sets
-            for col in col_set:
-                cols_unq_req.add(col)
-        cols_unq = set(self.xdata.columns.tolist())
-        cols_other = cols_unq.difference(cols_unq_req)
-        col_sets = sorted(col_sets, key=len, reverse=True)  # sort list based on the length of sublists
-        col_sets.extend([[c] for c in cols_other])
-        col_sets = col_sets
+    # def _get_col_sets_to_use(self, col_sets):
+    #     """ col_cets is a list of lists (each list contains col names). """
+    #     cols_unq_req = set()  # set of unique cols that were requested
+    #     for col_set in col_sets:  # get the unique cols that were passed in col_sets
+    #         for col in col_set:
+    #             cols_unq_req.add(col)
+    #     cols_unq = set(self.xdata.columns.tolist())
+    #     cols_other = cols_unq.difference(cols_unq_req)
+    #     col_sets = sorted(col_sets, key=len, reverse=True)  # sort list based on the length of sublists
+    #     col_sets.extend([[c] for c in cols_other])
+    #     col_sets = col_sets
         
-        # Use each col only once
-        # cols_unq_req = set()   # set of unique cols that were requested in input arg
-        # cols_sets_chosen = []  # selected sets of cols for which fi will be computed
-        # for i, col_set in enumerate(col_sets[::-1]):
-        #     if len(set(col_set).intersection(cols_unq_req)) == 0:
-        #         cols_sets_chosen.append(col_set)
-        #         for col in col_set:
-        #             cols_unq_req.add(col)
+    #     # Use each col only once
+    #     # cols_unq_req = set()   # set of unique cols that were requested in input arg
+    #     # cols_sets_chosen = []  # selected sets of cols for which fi will be computed
+    #     # for i, col_set in enumerate(col_sets[::-1]):
+    #     #     if len(set(col_set).intersection(cols_unq_req)) == 0:
+    #     #         cols_sets_chosen.append(col_set)
+    #     #         for col in col_set:
+    #     #             cols_unq_req.add(col)
          
-        return col_sets
+    #     return col_sets
 
 
     def gen_col_sets(self, th=0.7, toplot=False, figsize=None, verbose=True):
@@ -132,10 +121,10 @@ class PFI:
         Reference:
         https://stackoverflow.com/questions/40284774/efficient-way-for-finding-all-the-complete-subgraphs-of-a-given-graph-python
         A = np.array([[0, 1, 1, 0, 0],
-                    [1, 0, 1, 0, 0],
-                    [1, 1, 0, 1, 0],
-                    [0, 0, 1, 0, 1],
-                    [0, 0, 0, 1, 0]])
+                      [1, 0, 1, 0, 0],
+                      [1, 1, 0, 1, 0],
+                      [0, 0, 1, 0, 1],
+                      [0, 0, 0, 1, 0]])
         G = nx.from_numpy_matrix(A)
         [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
         """
@@ -147,8 +136,6 @@ class PFI:
 
         # Mask the corr matrix
         cor = cor.applymap(lambda x: 1 if x > th else 0)
-        # cor[cor < th] = 0
-        # cor[cor >= th] = 1
 
         # Remove uncorrelated features
         idx = (cor.sum(axis=0) > 10**-3).values
@@ -161,13 +148,37 @@ class PFI:
         # cor = cor * mask
 
         # https://stackoverflow.com/questions/40284774/efficient-way-for-finding-all-the-complete-subgraphs-of-a-given-graph-python
-        # https://networkx.github.io/documentation/stable/reference/generated/networkx.convert_matrix.from_numpy_matrix.html
-        # https://networkx.github.io/documentation/stable/reference/generated/networkx.convert_matrix.from_pandas_adjacency.html
-        # G = nx.from_numpy_matrix(cor.values)
         G = nx.from_pandas_adjacency(cor)
         t0 = time.time()
-        cliques = [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
-        self.col_sets = cliques
+        self.cliques = [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
+        col_sets = self.cliques
+
+        # # Compute col sets from cliques (use all possible cliques)
+        # cols_unq_req = set()  # set of unique cols that were requested
+        # for col_set in col_sets:  # get the unique cols that were passed in col_sets
+        #     for col in col_set:
+        #         cols_unq_req.add(col)
+        # cols_unq = set(self.xdata.columns.tolist())
+        # cols_other = cols_unq.difference(cols_unq_req)
+        # col_sets = sorted(col_sets, key=len, reverse=True)  # sort list based on the length of subsets
+        # col_sets.extend([[c] for c in cols_other])
+        # self.col_sets = col_sets
+
+        # Compute col sets from cliques (use each col only once)
+        cols_unq_req = set()   # set of unique cols that were requested in input arg
+        cols_sets_chosen = []  # selected sets of cols for which fi will be computed
+        for i, col_set in enumerate(col_sets[::-1]):
+            if len(set(col_set).intersection(cols_unq_req)) == 0:
+                cols_sets_chosen.append(col_set)
+                for col in col_set:
+                    cols_unq_req.add(col)
+        cols_unq = set(self.xdata.columns.tolist())
+        cols_other = cols_unq.difference(cols_unq_req)
+        cols_sets_chosen = sorted(cols_sets_chosen, key=len, reverse=True)  # sort list based on the length of subsets
+        cols_sets_chosen.extend([[c] for c in cols_other])
+        self.col_sets = cols_sets_chosen
+
+        self.col_sets = cols_sets_chosen
 
         if verbose:
             print(f'cor matrix after removing features shape {cor.shape}')
@@ -213,9 +224,10 @@ class PFI:
         """
         # Get a subset of columns
         if hasattr(self, 'col_sets'):
-            col_sets = self._get_col_sets_to_use(self.col_sets)
+            # col_sets = self._get_col_sets_to_use(col_sets=self.cliques)
+            col_sets = self.col_sets
         else:
-            col_sets = [[c] for c in self.xdata.columns.tolist()]            
+            col_sets = [[c] for c in self.xdata.columns.tolist()]
 
         # Create df to store feature importance
         fi_score = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'imp', 'std'])
@@ -364,23 +376,24 @@ class PFI:
 
 
     def dump_col_sets(self, path=None, name=None):        
-        """ Dump the col sets. """
+        """ Dump the col sets.
+        https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
+        """
         if name:
-            filename = 'col_sets_' + name + '.txt'
+            colset_filename = 'col_sets_' + name + '.json'
+            clique_filename = 'cliques_' + name + '.json'
         else:
-            filename = 'col_sets.txt'
+            colset_filename = 'col_sets.json'
+            clique_filename = 'cliques.json'
 
         if hasattr(self, 'col_sets'):
             if path:
-                with open(os.path.join(path, filename), 'w') as fh:  
+                with open(os.path.join(path, colset_filename), 'w') as fh:  
                     json.dump(self.col_sets, fh)
+                with open(os.path.join(path, clique_filename), 'w') as fh:  
+                    json.dump(self.cliques, fh)
             else:
-                with open(filename, 'w') as fh:  
+                with open(colset_filename, 'w') as fh:  
                     json.dump(self.col_sets, fh)
-        else:
-            if path:
-                with open(os.path.join(path, filename), 'w') as fh:  
-                    json.dump(col_sets, fh)
-            else:
-                with open(filename, 'w') as fh:  
-                    json.dump(col_sets, fh)
+                with open(clique_filename, 'w') as fh:  
+                    json.dump(self.cliques, fh)
