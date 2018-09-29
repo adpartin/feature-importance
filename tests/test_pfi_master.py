@@ -33,7 +33,7 @@ import pfi_utils
 DATAPATH = os.path.join(file_path, 'data', 'data_classification_corr')
 MODELDIR = os.path.join(file_path, 'keras_model_classifier')
 TEMPDIR = os.path.join(file_path, 'tempdir')
-OUTDIR = os.path.join(file_path, 'test_results_master')
+OUTDIR = os.path.join(file_path, 'results_test_pfi_master')
 CORR_THRES = 0.74
 SEED = 0
 

@@ -178,8 +178,6 @@ class PFI:
         cols_sets_chosen.extend([[c] for c in cols_other])
         self.col_sets = cols_sets_chosen
 
-        self.col_sets = cols_sets_chosen
-
         if verbose:
             print(f'cor matrix after removing features shape {cor.shape}')
             print(f'Time to compute cliques: {(time.time()-t0)/60:.2f} min')
@@ -191,7 +189,7 @@ class PFI:
 
 
     # def compute_score_pfi(self, ml_type, col_sets=[], verbose=False):
-    def compute_pfi(self, ml_type, verbose=False):
+    def compute_pfi(self, ml_type, path=None, verbose=False):
         """ Compute permutation feature importance using both:
         1. MDA/MDS: mean decrease in accuracy/score.
         2. VAR: prediction variance
@@ -219,6 +217,7 @@ class PFI:
         Args:
             ml_type (str) : string that specifies whether it's a classification ('c') or regression ('r') problem
             col_sets (list of lists) : each sublist/subset contains group of featues/cols names
+            path (str) : path to save 3-D predictions numpy array [samples, col_sets, shuffles]
         Returns:
             fi (df) : feature importance dataframe with columns 'cols' (column names) and 'imp' (relative importance)
         """
@@ -259,27 +258,34 @@ class PFI:
         # ===============================================================
 
         # Iter over col sets (col set per node)
-        for i, col_set in enumerate(col_sets):
-            fi_score.loc[i, 'cols'] = ','.join(col_set)
-            fi_var.loc[i, 'cols'] = ','.join(col_set)
-            pred_df = self._shuf_and_pred(col_set)
+        pred = np.zeros((self.xdata.shape[0], len(col_sets), self.n_shuffles))
+        for ci, col_set in enumerate(col_sets):
+            fi_score.loc[ci, 'cols'] = ','.join(col_set)
+            fi_var.loc[ci, 'cols'] = ','.join(col_set)
+            # pred_df = self._shuf_and_pred(col_set)
+            pred[:,ci,:] = self._shuf_and_pred(col_set)
 
             # MDA/MDS
             if ml_type == 'c':
-                score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='micro') for j in range(pred_df.shape[1])]
+                # score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='micro') for j in range(pred_df.shape[1])]
                 # score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='macro') for j in range(pred_df.shape[1])]
+                score_vec = [f1_score(y_true=ydata, y_pred=pred[:, ci, j], average='micro') for j in range(pred.shape[2])]
             else:
-                score_vec = [r2_score(y_true=ydata, y_pred=pred_df.iloc[:, j]) for j in range(pred_df.shape[1])]
+                # score_vec = [r2_score(y_true=ydata, y_pred=pred_df.iloc[:, j]) for j in range(pred_df.shape[1])]
+                score_vec = [r2_score(y_true=ydata, y_pred=pred[:, ci, j]) for j in range(pred.shape[1])]
 
-            fi_score.loc[i, 'imp'] = ref_score - np.array(score_vec).mean()
-            fi_score.loc[i, 'std'] = np.array(score_vec).std()
+            fi_score.loc[ci, 'imp'] = ref_score - np.array(score_vec).mean()
+            fi_score.loc[ci, 'std'] = np.array(score_vec).std()
 
             # VAR
-            fi_var.loc[i, 'imp'] = pred_df.var(axis=1).mean()
+            # fi_var.loc[ci, 'imp'] = pred_df.var(axis=1).mean()
+            fi_var.loc[ci, 'imp'] = np.mean(np.std(pred[:, ci, :], axis=1))
 
             if verbose:
-                if i % 100 == 0:
-                    print(f'col {i + 1}/{len(col_sets)}')
+                if ci % 100 == 0:
+                    print(f'col {ci + 1}/{len(col_sets)}')
+
+        self.pred = pred
 
         # MDA/MDS
         self.fi_score = fi_score.sort_values('imp', ascending=False).reset_index(drop=True)
@@ -353,47 +359,58 @@ class PFI:
         return fig
 
 
-    def dump_fi(self, path=None, name=None):
-        """ Dump fi tables into file. """
+    # def dump_fi(self, path=None, name=None):
+    #     """ Dump fi tables into file. """
+    #     if name:
+    #         var_filename = 'fi_var_' + name + '.csv'
+    #         score_filename = 'fi_score_' + name + '.csv'
+    #     else:
+    #         var_filename = 'fi_var.csv'
+    #         score_filename = 'fi_score.csv'
+
+    #     if hasattr(self, 'fi_var'):
+    #         if path:
+    #             self.fi_var.to_csv(os.path.join(path, var_filename), index=False)
+    #         else:
+    #             self.fi_var.to_csv(var_filename, index=False)
+        
+    #     if hasattr(self, 'fi_score'):
+    #         if path:
+    #             self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
+    #         else:
+    #             self.fi_score.to_csv(score_filename, index=False)
+
+
+    def dump(self, path=None, name=None):        
+        """ Dump resutls to files.
+        https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
+        """
+        if path is None:
+            path = '.'
+
         if name:
             var_filename = 'fi_var_' + name + '.csv'
             score_filename = 'fi_score_' + name + '.csv'
+            colset_filename = 'colsets_' + name + '.json'
+            clique_filename = 'cliques_' + name + '.json'
+            pred_filename = 'pred_' + name + '.npy'
         else:
             var_filename = 'fi_var.csv'
-            score_filename = 'fi_score.csv'
-
-        if hasattr(self, 'fi_var'):
-            if path:
-                self.fi_var.to_csv(os.path.join(path, var_filename), index=False)
-            else:
-                self.fi_var.to_csv(var_filename, index=False)
-        
-        if hasattr(self, 'fi_score'):
-            if path:
-                self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
-            else:
-                self.fi_score.to_csv(score_filename, index=False)
-
-
-    def dump_col_sets(self, path=None, name=None):        
-        """ Dump the col sets.
-        https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
-        """
-        if name:
-            colset_filename = 'col_sets_' + name + '.json'
-            clique_filename = 'cliques_' + name + '.json'
-        else:
-            colset_filename = 'col_sets.json'
+            score_filename = 'fi_score.csv'            
+            colset_filename = 'colsets.json'
             clique_filename = 'cliques.json'
+            pred_filename = 'pred.npy'
 
         if hasattr(self, 'col_sets'):
-            if path:
-                with open(os.path.join(path, colset_filename), 'w') as fh:  
-                    json.dump(self.col_sets, fh)
-                with open(os.path.join(path, clique_filename), 'w') as fh:  
-                    json.dump(self.cliques, fh)
-            else:
-                with open(colset_filename, 'w') as fh:  
-                    json.dump(self.col_sets, fh)
-                with open(clique_filename, 'w') as fh:  
-                    json.dump(self.cliques, fh)
+            with open(os.path.join(path, colset_filename), 'w') as fh:  
+                json.dump(self.col_sets, fh)
+            with open(os.path.join(path, clique_filename), 'w') as fh:  
+                json.dump(self.cliques, fh)
+
+        if hasattr(self, 'fi_var'):
+            self.fi_var.to_csv(os.path.join(path, var_filename), index=False)
+        
+        if hasattr(self, 'fi_score'):
+            self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
+
+        np.save(os.path.join(path, pred_filename), self.pred, allow_pickle=False)

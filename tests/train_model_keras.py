@@ -1,3 +1,7 @@
+"""
+This code trains a keras NN model and saves the model and its weights to files.
+The model and weights can then loaded for inference (used in test_pfi_master.py).
+"""
 from __future__ import print_function, division
 
 import os
@@ -37,10 +41,12 @@ SEED = 0
 def create_nn_classifier(n_features, n_classes):
     keras_model = Sequential()
     keras_model.add(Dense(units=32, activation='relu', input_shape=(n_features,)))
-    # keras_model.add(Dense(units=1, activation='sigmoid'))
-    # keras_model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-    keras_model.add(Dense(units=n_classes, activation='softmax'))
-    keras_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    if n_classes == 2:
+        keras_model.add(Dense(units=1, activation='sigmoid'))
+        keras_model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    elif n_classes > 2:
+        keras_model.add(Dense(units=n_classes, activation='softmax'))
+        keras_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return keras_model
 
 

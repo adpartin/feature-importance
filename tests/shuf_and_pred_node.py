@@ -28,7 +28,7 @@ DATAPATH = os.path.join(file_path, 'data', 'data_classification_corr')
 MODELDIR = os.path.join(file_path, 'keras_model_classifier')
 # MODELDIR = os.path.join(file_path, 'keras_model')
 TEMPDIR = os.path.join(file_path, 'tempdir')
-OUTDIR = os.path.join(file_path, 'test_results_node')
+OUTDIR = os.path.join(file_path, 'results_test_pfi_node')
 SEED = 0
 
 
