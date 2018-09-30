@@ -76,19 +76,22 @@ def init_params():
     parser = argparse.ArgumentParser(description='Compute feature importance via feature shuffling (supports keras).')
     parser.add_argument('-ns', '--n_shuffles', dest='n_shuffles',
                         default=N_SHUFFLES, type=int,
-                        help=f'number of shuffles (default: {N_SHUFFLES})')
+                        help=f'Number of shuffles (default: {N_SHUFFLES}).')
     parser.add_argument('-th', '--corr_th', dest='corr_th',
                         default=CORR_THRES, type=float,
-                        help=f'correlation threshold for which to group the columns for pfi (default: {CORR_THRES})')
+                        help=f'Correlation threshold for which to group the columns for pfi (default: {CORR_THRES}).')
     parser.add_argument('-e', '--epoch', dest='epoch',
                         default=EPOCH, type=int,
-                        help=f'number of epochs (default: {EPOCH})')
+                        help=f'Number of epochs (default: {EPOCH}).')
     parser.add_argument('-b', '--batch', dest='batch',
                         default=EPOCH, type=int,
-                        help=f'batch size (default: {BATCH})')
+                        help=f'Batch size (default: {BATCH}).')
     parser.add_argument('-mc', '--max_cols', dest='max_cols',
                         default=MAX_COLS, type=int,
-                        help=f'batch size (default: {MAX_COLS})')                            
+                        help=f'Maxium cols to plot for feature importance (default: {MAX_COLS}).')
+    parser.add_argument('-bs', '--bootstrap_cols', dest='bootstrap_cols',
+                        default=-1, type=int,
+                        help=f'The number of cols to bootsrap from the dataframe.')
     return parser.parse_args()
 
 
@@ -112,7 +115,8 @@ def run(args):
     xdata = data.iloc[:, 1:].copy()
     ydata = data.iloc[:, 0].copy()
 
-    xdata = xdata.sample(n=30, axis=1, random_state=SEED)  # Take a subset of cols
+    if args.bootstrap_cols > -1:
+        xdata = xdata.sample(n=args.bootstrap_cols, axis=1, random_state=SEED)  # Take a subset of cols
     features = xdata.columns
 
     print('data.shape', data.shape)
@@ -205,9 +209,11 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_fi.png'), bbox_inches='tight')
 
     # PFI
+    t0 = time.time()
     fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='c')
+    print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
     fig = fi_obj.plot_var_fi(max_cols=max_cols, title='RF Classifier (PFI var)', ylabel='Importance (relative)')

@@ -82,30 +82,6 @@ class PFI:
         return pred_df
 
 
-    # def _get_col_sets_to_use(self, col_sets):
-    #     """ col_cets is a list of lists (each list contains col names). """
-    #     cols_unq_req = set()  # set of unique cols that were requested
-    #     for col_set in col_sets:  # get the unique cols that were passed in col_sets
-    #         for col in col_set:
-    #             cols_unq_req.add(col)
-    #     cols_unq = set(self.xdata.columns.tolist())
-    #     cols_other = cols_unq.difference(cols_unq_req)
-    #     col_sets = sorted(col_sets, key=len, reverse=True)  # sort list based on the length of sublists
-    #     col_sets.extend([[c] for c in cols_other])
-    #     col_sets = col_sets
-        
-    #     # Use each col only once
-    #     # cols_unq_req = set()   # set of unique cols that were requested in input arg
-    #     # cols_sets_chosen = []  # selected sets of cols for which fi will be computed
-    #     # for i, col_set in enumerate(col_sets[::-1]):
-    #     #     if len(set(col_set).intersection(cols_unq_req)) == 0:
-    #     #         cols_sets_chosen.append(col_set)
-    #     #         for col in col_set:
-    #     #             cols_unq_req.add(col)
-         
-    #     return col_sets
-
-
     def gen_col_sets(self, th=0.7, toplot=False, figsize=None, verbose=True):
         """ Generate subgroups of mutually correlated features.
         This problem is solved using the graph theory approach.
@@ -357,28 +333,6 @@ class PFI:
                             max_cols=max_cols, title=title, ylabel=ylabel)
         self.fig_fi_score = fig
         return fig
-
-
-    # def dump_fi(self, path=None, name=None):
-    #     """ Dump fi tables into file. """
-    #     if name:
-    #         var_filename = 'fi_var_' + name + '.csv'
-    #         score_filename = 'fi_score_' + name + '.csv'
-    #     else:
-    #         var_filename = 'fi_var.csv'
-    #         score_filename = 'fi_score.csv'
-
-    #     if hasattr(self, 'fi_var'):
-    #         if path:
-    #             self.fi_var.to_csv(os.path.join(path, var_filename), index=False)
-    #         else:
-    #             self.fi_var.to_csv(var_filename, index=False)
-        
-    #     if hasattr(self, 'fi_score'):
-    #         if path:
-    #             self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
-    #         else:
-    #             self.fi_score.to_csv(score_filename, index=False)
 
 
     def dump(self, path=None, name=None):        
