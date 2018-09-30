@@ -9,12 +9,12 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
 file_path = os.path.dirname(os.path.relpath(__file__))
-pfi_path = os.path.abspath(os.path.join(file_path, '..', 'pfi'))
-utils_path = os.path.abspath(os.path.join(pfi_path, 'utils_py'))
-# utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
+
+utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
 sys.path.append(utils_path)
 import utils_all as utils
-# pfi_path = os.path.abspath(os.path.join(file_path, '..', 'pfi'))
+
+pfi_path = os.path.abspath(os.path.join(file_path, '..', 'pfi'))
 sys.path.append(pfi_path)
 import pfi
 import pfi_utils

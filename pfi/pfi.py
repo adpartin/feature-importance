@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import f1_score, r2_score, mean_absolute_error
 
 file_path = os.path.dirname(os.path.relpath(__file__))
-
-utils_path = os.path.abspath('utils_py')
+utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
 sys.path.append(utils_path)
 import utils_all as utils
+
 
 class PFI:
     """ Permutation feature importance.
