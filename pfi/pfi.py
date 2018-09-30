@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import json
+import logging
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -22,7 +23,7 @@ class PFI:
         pfi = PFI(model=ml_model, xdata=X, ydata=y)
         pfi.compute_importance_score(ml_type='c')
     """
-    def __init__(self, model=None, xdata=None, ydata=None, n_shuffles=5):
+    def __init__(self, model=None, xdata=None, ydata=None, n_shuffles=5, outdir='.'):
         """
         Args:
             model : ML model
@@ -42,6 +43,26 @@ class PFI:
             self.ydata = ydata.copy()
         
         self.n_shuffles = n_shuffles
+
+        # ============  Create logger  ============
+        # https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
+        # Logging
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+
+        # create a file handler
+        fh = logging.FileHandler(filename=os.path.join(outdir, 'logfile.log'))
+        fh.setLevel(logging.INFO)
+
+        # create a logging format
+        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter("[%(asctime)s %(process)d] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        fh.setFormatter(formatter)
+
+        # add the handlers to the logger
+        logger.addHandler(fh)
+        self.logger = logger
+        # =========================================
 
 
     def _shuf_cols(self, df, col_set, seed=None):
@@ -127,6 +148,8 @@ class PFI:
         G = nx.from_pandas_adjacency(cor)
         t0 = time.time()
         self.cliques = [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
+        self.logger.info(f'Time to compute cliques:  {(time.time()-t0)/60:.3f} mins')
+        self.logger.info(f'Corr matrix after removing features shape:  {cor.shape}')
         col_sets = self.cliques
 
         # # Compute col sets from cliques (use all possible cliques)
@@ -155,8 +178,8 @@ class PFI:
         self.col_sets = cols_sets_chosen
 
         if verbose:
-            print(f'cor matrix after removing features shape {cor.shape}')
-            print(f'Time to compute cliques: {(time.time()-t0)/60:.2f} min')
+            print(f'Corr matrix after removing features shape:  {cor.shape}')
+            print(f'Time to compute cliques:  {(time.time()-t0)/60:.2f} min')
 
         if toplot:
             if figsize is None:
@@ -165,7 +188,7 @@ class PFI:
 
 
     # def compute_score_pfi(self, ml_type, col_sets=[], verbose=False):
-    def compute_pfi(self, ml_type, path=None, verbose=False):
+    def compute_pfi(self, ml_type, verbose=False):
         """ Compute permutation feature importance using both:
         1. MDA/MDS: mean decrease in accuracy/score.
         2. VAR: prediction variance
@@ -193,7 +216,6 @@ class PFI:
         Args:
             ml_type (str) : string that specifies whether it's a classification ('c') or regression ('r') problem
             col_sets (list of lists) : each sublist/subset contains group of featues/cols names
-            path (str) : path to save 3-D predictions numpy array [samples, col_sets, shuffles]
         Returns:
             fi (df) : feature importance dataframe with columns 'cols' (column names) and 'imp' (relative importance)
         """
@@ -234,6 +256,7 @@ class PFI:
         # ===============================================================
 
         # Iter over col sets (col set per node)
+        t0 = time.time()
         pred = np.zeros((self.xdata.shape[0], len(col_sets), self.n_shuffles))
         for ci, col_set in enumerate(col_sets):
             fi_score.loc[ci, 'cols'] = ','.join(col_set)
@@ -261,6 +284,7 @@ class PFI:
                 if ci % 100 == 0:
                     print(f'col {ci + 1}/{len(col_sets)}')
 
+        self.logger.info(f'Time to compute PFI:  {(time.time()-t0)/60:.3f} mins')
         self.pred = pred
 
         # MDA/MDS
@@ -335,13 +359,10 @@ class PFI:
         return fig
 
 
-    def dump(self, path=None, name=None):        
+    def dump(self, path='.', name=None):        
         """ Dump resutls to files.
         https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
         """
-        if path is None:
-            path = '.'
-
         if name:
             var_filename = 'fi_var_' + name + '.csv'
             score_filename = 'fi_score_' + name + '.csv'

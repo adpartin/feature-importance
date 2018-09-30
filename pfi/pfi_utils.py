@@ -6,7 +6,8 @@ import time
 import numpy as np
 import pandas as pd
 
-utils_path = os.path.abspath('utils_py')
+file_path = os.path.dirname(os.path.relpath(__file__))
+utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
 sys.path.append(utils_path)
 import utils_all as utils
 

@@ -11,6 +11,7 @@ from __future__ import print_function, division
 import os
 import sys
 import time
+import logging
 import argparse
 
 import numpy as np
@@ -41,15 +42,36 @@ sys.path.append(pfi_path)
 import pfi
 import pfi_utils
 
-OUTDIR = os.path.join(file_path, 'results_tc_pfi_aacr')
-DATAPATH = os.path.join(file_path, 'data', 'tc_data')
 APP = 'tc'
+DATAPATH = os.path.join(file_path, 'data', f'{APP}_data')
 N_SHUFFLES = 20
-CORR_THRES = 0.75
+CORR_THRES = 0.6
 EPOCH = 60
 BATCH = 32
 MAX_COLS = 20
+OUTDIR = os.path.join(file_path, f'results_pfi_aacr_{APP}_cor{CORR_THRES}')
 SEED = 0
+
+
+# def set_logger(filename='logfile.log'):
+#     """ ... """
+#     # Logging
+#     logger = logging.getLogger(__name__)
+#     logger.setLevel(logging.INFO)
+
+#     # create a file handler
+#     fh = logging.FileHandler(filename=filename)
+#     fh.setLevel(logging.INFO)
+
+#     # create a logging format
+#     # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     formatter = logging.Formatter("[%(asctime)s %(process)d] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+#     fh.setFormatter(formatter)
+
+#     # add the handlers to the logger
+#     logger.addHandler(fh)
+
+#     return logger
 
 
 def create_nn_classifier(n_features, n_classes):
@@ -209,10 +231,12 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_fi.png'), bbox_inches='tight')
 
     # PFI
+    print('Compute PFI ...')
     t0 = time.time()
-    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
+    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='c')
+    # logger.info(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI

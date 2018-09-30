@@ -162,9 +162,12 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, 'rf_classifier_fi.png'), bbox_inches='tight')
 
     # PFI
+    print('Compute PFI (classifier) ...')
+    t0 = time.time()
     fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='c')
+    print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
     fig = fi_obj.plot_var_fi(title='RF Classifier (PFI var)', ylabel='Importance (relative)')
@@ -218,9 +221,12 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, 'rf_regressor_fi.png'), bbox_inches='tight')
 
     # PFI
+    print('Compute PFI (classifier) ...')
+    t0 = time.time()    
     fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='r')
+    print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
     fig = fi_obj.plot_var_fi(title='RF Regressor (PFI var)', ylabel='Importance (relative)')
