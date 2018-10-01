@@ -188,7 +188,7 @@ class PFI:
 
 
     # def compute_score_pfi(self, ml_type, col_sets=[], verbose=False):
-    def compute_pfi(self, ml_type, verbose=False):
+    def compute_pfi(self, ml_type, verbose=True):
         """ Compute permutation feature importance using both:
         1. MDA/MDS: mean decrease in accuracy/score.
         2. VAR: prediction variance
@@ -285,7 +285,7 @@ class PFI:
                     print(f'col {ci + 1}/{len(col_sets)}')
 
         self.logger.info(f'Time to compute PFI:  {(time.time()-t0)/60:.3f} mins')
-        self.pred = pred
+        self.pred = np.around(pred, decimals=3)
 
         # MDA/MDS
         self.fi_score = fi_score.sort_values('imp', ascending=False).reset_index(drop=True)

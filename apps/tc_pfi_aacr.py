@@ -45,7 +45,7 @@ import pfi_utils
 APP = 'tc'
 DATAPATH = os.path.join(file_path, 'data', f'{APP}_data')
 N_SHUFFLES = 20
-CORR_THRES = 0.6
+CORR_THRES = 0.9
 EPOCH = 60
 BATCH = 32
 MAX_COLS = 20
@@ -141,8 +141,10 @@ def run(args):
         xdata = xdata.sample(n=args.bootstrap_cols, axis=1, random_state=SEED)  # Take a subset of cols
     features = xdata.columns
 
-    print('data.shape', data.shape)
+    print('ddata.shape', data.shape)
     print(data.iloc[:3, :4])
+
+    print('\nxdata.shape', xdata.shape)
     print('np.unique(ydata)', np.unique(ydata))
 
     scaler = StandardScaler()
@@ -231,7 +233,7 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_fi.png'), bbox_inches='tight')
 
     # PFI
-    print('Compute PFI ...')
+    print('\nCompute PFI ...')
     t0 = time.time()
     fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
