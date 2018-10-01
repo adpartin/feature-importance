@@ -51,7 +51,7 @@ class PFI:
         logger.setLevel(logging.INFO)
 
         # create a file handler
-        fh = logging.FileHandler(filename=os.path.join(outdir, 'logfile.log'))
+        fh = logging.FileHandler(filename=os.path.join(outdir, 'pfi_logfile.log'))
         fh.setLevel(logging.INFO)
 
         # create a logging format
@@ -388,4 +388,5 @@ class PFI:
         if hasattr(self, 'fi_score'):
             self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
 
-        np.save(os.path.join(path, pred_filename), self.pred, allow_pickle=False)
+        np.save(os.path.join(path, pred_filename, 'npy'), self.pred, allow_pickle=False)
+        # np.savez_compressed(os.path.join(path, pred_filename, 'npz'), self.pred)
