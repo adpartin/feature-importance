@@ -49,7 +49,6 @@ CORR_THRES = 0.9
 EPOCH = 60
 BATCH = 32
 MAX_COLS = 20
-OUTDIR = os.path.join(file_path, f'results_pfi_aacr_{APP}_cor{CORR_THRES}')
 SEED = 0
 
 
@@ -126,6 +125,7 @@ def run(args):
     max_cols = args.max_cols
 
     # Create necessary dirs
+    OUTDIR = os.path.join(file_path, f'results_pfi_aacr_{APP}_cor{corr_th}')
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
 
