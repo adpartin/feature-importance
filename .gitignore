@@ -1,0 +1,14 @@
+.*
+!/.gitignore
+__*
+*.R
+*log*
+apps/data/
+apps/*results*
+notebooks/cmpr_fi_methods.ipynb
+notebooks/sandbox.ipynb
+notebooks/data/
+tests/data/
+tests/keras_model*
+tests/*tempdir*
+tests/*results*
