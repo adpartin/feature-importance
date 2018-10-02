@@ -1,6 +1,6 @@
 .*
 !/.gitignore
-__*
+*__*
 *.R
 *log*
 apps/data/
