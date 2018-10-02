@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score, r2_score, mean_absolute_error
+from sklearn.metrics import f1_score, r2_score, mean_absolute_error, brier_score_loss
 
 file_path = os.path.dirname(os.path.relpath(__file__))
 utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
@@ -149,7 +149,7 @@ class PFI:
         t0 = time.time()
         self.cliques = [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
         self.logger.info(f'Time to compute cliques:  {(time.time()-t0)/60:.3f} mins')
-        self.logger.info(f'Corr matrix after removing features shape:  {cor.shape}')
+        self.logger.info(f'Corr matrix after removing features shape:  ({cor.shape[0]}, {cor.shape[1]})')
         col_sets = self.cliques
 
         # # Compute col sets from cliques (use all possible cliques)
@@ -368,13 +368,13 @@ class PFI:
             score_filename = 'fi_score_' + name + '.csv'
             colset_filename = 'colsets_' + name + '.json'
             clique_filename = 'cliques_' + name + '.json'
-            pred_filename = 'pred_' + name + '.npy'
+            pred_filename = 'pred_' + name
         else:
             var_filename = 'fi_var.csv'
             score_filename = 'fi_score.csv'            
             colset_filename = 'colsets.json'
             clique_filename = 'cliques.json'
-            pred_filename = 'pred.npy'
+            pred_filename = 'pred'
 
         if hasattr(self, 'col_sets'):
             with open(os.path.join(path, colset_filename), 'w') as fh:  
