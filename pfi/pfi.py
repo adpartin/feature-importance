@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import json
+import pdb
 import logging
 import numpy as np
 import pandas as pd
@@ -97,6 +98,7 @@ class PFI:
             preds = self.model.predict(xdata_shf)
             if preds.ndim > 1 and preds.shape[1] > 1:  # if classification, get the class label
                 preds = np.argmax(preds, axis=1)
+            ##preds = self.model.predict_proba(xdata_shf)[:,1]
 
             pred_df.iloc[:, s] = preds
 
@@ -148,8 +150,8 @@ class PFI:
         G = nx.from_pandas_adjacency(cor)
         t0 = time.time()
         self.cliques = [s for s in nx.enumerate_all_cliques(G) if len(s) > 1]
-        self.logger.info(f'Time to compute cliques:  {(time.time()-t0)/60:.3f} mins')
-        self.logger.info(f'Corr matrix after removing features shape:  ({cor.shape[0]}, {cor.shape[1]})')
+        self.logger.info(f'Time to compute cliques: {(time.time()-t0)/60:.3f} mins')
+        self.logger.info(f'Corr matrix after removing features: ({cor.shape[0]}, {cor.shape[1]})')
         col_sets = self.cliques
 
         # # Compute col sets from cliques (use all possible cliques)
@@ -227,8 +229,8 @@ class PFI:
             col_sets = [[c] for c in self.xdata.columns.tolist()]
 
         # Create df to store feature importance
-        fi_score = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'imp', 'std'])
-        fi_var = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'imp'])
+        fi_score = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp', 'std'])
+        fi_var = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp'])
 
         # ===============================================================
         #     Compute reference/baseline score (required for MDA/MDS)
@@ -237,6 +239,7 @@ class PFI:
         preds = self.model.predict(self.xdata)
         if preds.ndim > 1 and preds.shape[1] > 1:  # if classification, get the class label
             preds = np.argmax(preds, axis=1)
+        ##preds = self.model.predict_proba(self.xdata)[:,1]
 
         if self.ydata.ndim > 1 and self.ydata.shape[1] > 1:  # if classification, get the class label
             ydata = np.argmax(self.ydata, axis=1)
@@ -248,6 +251,7 @@ class PFI:
             self.ml_type = 'c'
             ref_score = f1_score(y_true=ydata, y_pred=preds, average='micro')
             # ref_score = f1_score(y_true=ydata, y_pred=preds, average='macro')
+            ##ref_score = brier_score_loss(y_true=ydata, y_prob=preds, pos_label=1)
         elif ml_type == 'r':
             self.ml_type = 'r'
             ref_score = r2_score(y_true=ydata, y_pred=preds)
@@ -261,14 +265,16 @@ class PFI:
         for ci, col_set in enumerate(col_sets):
             fi_score.loc[ci, 'cols'] = ','.join(col_set)
             fi_var.loc[ci, 'cols'] = ','.join(col_set)
+            fi_score.loc[ci, 'n'] = len(col_set)
+            fi_var.loc[ci, 'n'] = len(col_set)
             # pred_df = self._shuf_and_pred(col_set)
             pred[:,ci,:] = self._shuf_and_pred(col_set)
 
             # MDA/MDS
             if ml_type == 'c':
                 # score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='micro') for j in range(pred_df.shape[1])]
-                # score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='macro') for j in range(pred_df.shape[1])]
                 score_vec = [f1_score(y_true=ydata, y_pred=pred[:, ci, j], average='micro') for j in range(pred.shape[2])]
+                ##score_vec = [brier_score_loss(y_true=ydata, y_prob=pred[:, ci, j], pos_label=1) for j in range(pred.shape[2])]
             else:
                 # score_vec = [r2_score(y_true=ydata, y_pred=pred_df.iloc[:, j]) for j in range(pred_df.shape[1])]
                 score_vec = [r2_score(y_true=ydata, y_pred=pred[:, ci, j]) for j in range(pred.shape[1])]
@@ -284,7 +290,7 @@ class PFI:
                 if ci % 100 == 0:
                     print(f'col {ci + 1}/{len(col_sets)}')
 
-        self.logger.info(f'Time to compute PFI:  {(time.time()-t0)/60:.3f} mins')
+        self.logger.info(f'Time to compute PFI: {(time.time()-t0)/60:.3f} mins')
         self.pred = np.around(pred, decimals=3)
 
         # MDA/MDS
@@ -305,7 +311,7 @@ class PFI:
             fig : handle for plt figure
         """
         # assert hasattr(self, 'fi'), "'fi' attribute is not defined."
-        fontsize = 14
+        fontsize=14
 
         if max_cols and int(max_cols) <= fi.shape[0]:
             fi = fi.iloc[:int(max_cols), :]
@@ -316,24 +322,22 @@ class PFI:
 
         if plot_direction=='v':
             if 'std' in fi.columns.tolist():
-                ax.bar(range(len(fi)), fi['imp'], yerr=fi['std'], color='b', align='center', ecolor='r')
+                ax.bar(range(len(fi)), fi['imp'], yerr=fi['std'], align='center', color='b', ecolor='r')
             else:
-                ax.bar(range(len(fi)), fi['imp'], color='b', align='center')
+                ax.bar(range(len(fi)), fi['imp'], align='center', color='b')
             ax.set_xticks(range(len(fi)))
             ax.set_xticklabels(fi['cols'], rotation='vertical', fontsize=fontsize)
             ax.set_xlim([-1, len(fi)])
-
             ax.set_xlabel('Feature', fontsize=fontsize)
             ax.set_ylabel('Importance', fontsize=fontsize)
         else:
             if 'std' in fi.columns.tolist():
-                ax.barh(range(len(fi)), fi['imp'], yerr=fi['std'], color='b', align='center', ecolor='r')
+                ax.barh(range(len(fi)), fi['imp'], yerr=fi['std'], align='center', color='b', ecolor='r')
             else:
-                ax.barh(range(len(fi)), fi['imp'], color='b', align='center')
+                ax.barh(range(len(fi)), fi['imp'], align='center', color='b')
             ax.set_yticks(range(len(fi)))
             ax.set_yticklabels(fi['cols'], rotation='horizontal', fontsize=fontsize)
             ax.set_ylim([-1, len(fi)])
-
             # ax.invert_yaxis()
             ax.set_ylabel('Feature', fontsize=fontsize)
             ax.set_xlabel('Importance', fontsize=fontsize)
@@ -364,11 +368,11 @@ class PFI:
         https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
         """
         if name:
-            var_filename = 'fi_var_' + name + '.csv'
-            score_filename = 'fi_score_' + name + '.csv'
-            colset_filename = 'colsets_' + name + '.json'
-            clique_filename = 'cliques_' + name + '.json'
-            pred_filename = 'pred_' + name
+            var_filename = name + '_fi_var' + '.csv'
+            score_filename = name + '_fi_score' + '.csv'
+            colset_filename = name + '_colsets' + '.json'
+            clique_filename = name + '_cliques' + '.json'
+            pred_filename = name + '_pred'
         else:
             var_filename = 'fi_var.csv'
             score_filename = 'fi_score.csv'            
@@ -386,7 +390,7 @@ class PFI:
             self.fi_var.to_csv(os.path.join(path, var_filename), index=False)
         
         if hasattr(self, 'fi_score'):
-            self.fi_var.to_csv(os.path.join(path, score_filename), index=False)
+            self.fi_score.to_csv(os.path.join(path, score_filename), index=False)
 
-        np.save(os.path.join(path, pred_filename, 'npy'), self.pred, allow_pickle=False)
-        # np.savez_compressed(os.path.join(path, pred_filename, 'npz'), self.pred)
+        np.save(os.path.join(path, pred_filename+'.npy'), self.pred, allow_pickle=False)
+        # np.savez_compressed(os.path.join(path, pred_filename+'.npz'), self.pred)

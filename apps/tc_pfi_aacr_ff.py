@@ -45,9 +45,11 @@ import pfi_utils
 
 APP = 'tc'
 # DATAPATH = os.path.join(file_path, 'data', f'{APP}_data')
-DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train')
-DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val')
-YENC_PATH = os.path.join(file_path, 'data', f'{APP}_y_enc')
+# DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train')
+# DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val')
+DATAPATH_TR = os.path.join('/vol/ml/apartin/Benchmarks/Data/Pilot1', 'P1B1.dev.train.csv')
+DATAPATH_VL = os.path.join('/vol/ml/apartin/Benchmarks/Data/Pilot1', 'P1B1.dev.test.csv')
+# YENC_PATH = os.path.join(file_path, 'data', f'{APP}_y_enc')
 N_SHUFFLES = 20
 CORR_THRES = 0.9
 EPOCH = 60
@@ -156,7 +158,7 @@ def run(args):
     max_cols = args.max_cols
 
     # Create necessary dirs
-    OUTDIR = os.path.join(file_path, f'results_aacr_{APP}_cor{corr_th}')
+    OUTDIR = os.path.join(file_path, f'results_aacr_{APP}_ff_cor{corr_th}')
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
     logger = set_logger(filename=os.path.join(OUTDIR, f'{APP}_main_logfile.log'))
@@ -166,15 +168,17 @@ def run(args):
     print('\nLoad TC data ...')
 
     # ---------- Load data ----------
-    y_enc = pd.read_csv(YENC_PATH, sep='\t')
+    # y_enc = pd.read_csv(YENC_PATH, sep='\t')
     ## data = pd.read_csv(DATAPATH, sep='\t')
     ## xdata = data.iloc[:, 1:].copy()
     ## ydata = data.iloc[:, 0].copy()
-    data_train = pd.read_csv(DATAPATH_TR, sep='\t')
-    data_val = pd.read_csv(DATAPATH_VL, sep='\t')
+    data_train = pd.read_csv(DATAPATH_TR, sep=',')
+    data_val = pd.read_csv(DATAPATH_VL, sep=',')
     print(f'\ndata_train.shape {data_train.shape}')
     print(f'data_val.shape   {data_val.shape}')
     
+    mm = pd.read_csv('/vol/ml/apartin/Benchmarks/Data/Pilot1/lincs1000.tsv', sep='\t')
+
     if args.bootstrap_cols > -1:
         ## xdata = xdata.sample(n=args.bootstrap_cols, axis=1, random_state=SEED)  # Take a subset of cols
         y_tmp = data_train.iloc[:,0]
@@ -196,68 +200,6 @@ def run(args):
     ##xdata = pd.DataFrame(xdata, columns=features)
 
     ##xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True, stratify=ydata)
-
-    # Compute corr matrix
-    # cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
-    # fig = utils.plot_cor_heatmap(cor)
-    # fig.savefig(os.path.join(OUTDIR, f'{APP}_feature_corr.png'), bbox_inches='tight')
-
-    # # k-fold scheme
-    # kfolds = 5
-    # if kfolds == 1:
-    #     skf = StratifiedShuffleSplit(n_splits=kfolds, test_size=0.2, random_state=SEED)
-    # else:
-    #     skf = StratifiedKFold(n_splits=kfolds, shuffle=False, random_state=SEED)
-
-    # # Run k-fold CV
-    # best_model = None
-    # best_model_id = 0
-    # best_score = 0
-    # df_scores = pd.DataFrame(index=range(kfolds), columns=['kfold', 'f1_micro', 'f1_macro'])
-
-    # for f, (train_idx, val_idx) in enumerate(skf.split(xdata, ydata)):
-    #     print(f'\nFold {f + 1}/{kfolds} ...\n')
-
-    #     print('train_idx', train_idx)
-    #     print('val_idx', val_idx)
-
-    #     # Split data
-    #     xtr, xvl = xdata[train_idx], xdata[val_idx]
-    #     ytr, yvl = ydata[train_idx], ydata[val_idx]
-
-    #     rf_model = RandomForestClassifier(n_estimators=150, max_features='sqrt', random_state=SEED)  # min_samples_split=3,
-    #     rf_model.fit(xtr, ytr)
-    #     score = rf_model.score(xvl, yvl)
-    #     print(f'Prediction score (mean accuracy): {score:.4f}')
-
-    #     yvl_preds = rf_model.predict(xvl)
-    #     print('true', yvl[:7])
-    #     print('pred', yvl_preds[:7])
-    #     print(f'f1_score micro: {f1_score(y_true=yvl, y_pred=yvl_preds, average='micro'):.3f}')
-    #     print(f'f1_score macro: {f1_score(y_true=yvl, y_pred=yvl_preds, average='macro'):.3f}')
-    #     tmp_df = pd.DataFrame({'yvl': yvl, 'yvl_preds': yvl_preds})
-    #     tmp_df.to_csv(os.path.join(OUTDIR, f'preds_cv_{f}.csv'), index=False)
-
-    #     # Plot feature importance
-    #     indices, fig = utils.plot_rf_fi(rf_model, n_features_toplot=15, title='FI RF Classifier')
-    #     fi = utils.get_rf_fi(rf_model)
-    #     fi.to_csv(os.path.join(OUTDIR, 'rf_classifier_fi.csv'), index=False)
-    #     fig.savefig(os.path.join(OUTDIR, 'rf_classifier_fi.png'), bbox_inches='tight')
-
-    #     # Compute scores
-    #     df_scores.loc[f, 'kfold'] = f + 1
-    #     df_scores.loc[f, 'f1_micro'] = f1_score(y_true=yvl, y_pred=yvl_preds, average='micro')
-    #     df_scores.loc[f, 'f1_macro'] = f1_score(y_true=yvl, y_pred=yvl_preds, average='macro')
-
-    #     # Save best model
-    #     ## if val_scores.iloc[f, 0] < best_score:
-    #     if best_score < df_scores.loc[f, 'f1_micro']:
-    #         best_score = df_scores.loc[f, 'f1_micro']
-    #         best_model = rf_model
-    #         best_model_id = f
-
-    # print(df_scores)
-    # model = best_model
 
     # ==========  RF classifier  ==========
     logger.info('RF classifier ...')

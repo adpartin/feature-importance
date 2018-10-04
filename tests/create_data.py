@@ -27,16 +27,16 @@ def init_params():
     parser = argparse.ArgumentParser(description='Generates classification and regression datasets.')
     parser.add_argument('-s', '--n_samples', dest='n_samples',
                         default=N_SAMPLES, type=int,
-                        help='number of samples/observations/rows (default: {})'.format(N_SAMPLES))
+                        help=f'number of samples/observations/rows (default: {N_SAMPLES})')
     parser.add_argument('-c', '--n_classes', dest='n_classes',
                         default=N_CLASSES, type=int,
-                        help='number of target classes (for classification) (default: {})'.format(N_CLASSES))
+                        help=f'number of target classes (for classification) (default: {N_CLASSES})')
     parser.add_argument('-f', '--n_features', dest='n_features',
                         default=N_FEATURES, type=int,
-                        help='number of features/variables/columns (default: {})'.format(N_FEATURES))
+                        help=f'number of features/variables/columns (default: {N_FEATURES})')
     parser.add_argument('-i', '--n_informative', dest='n_informative',
                         default=N_INFORMATIVE, type=int,
-                        help='number of important/informative features (default: {})'.format(N_INFORMATIVE))
+                        help=f'number of important/informative features (default: {N_INFORMATIVE})')
     return parser.parse_args()
 
 

@@ -2,6 +2,7 @@
 !/.gitignore
 *__*
 *.R
+*.tsv
 *log*
 apps/data/
 apps/*results*
