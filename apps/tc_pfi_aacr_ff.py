@@ -179,6 +179,11 @@ def run(args):
     
     mm = pd.read_csv('/vol/ml/apartin/Benchmarks/Data/Pilot1/lincs1000.tsv', sep='\t')
 
+    train = train[['case_id', 'cancer_type'] + mm['gdc'].tolist()]  # Extract lincs from the whole dataset
+    test = test[['case_id', 'cancer_type'] + mm['gdc'].tolist()]  # Extract lincs from the whole dataset
+    print(train.shape)
+    print(test.shape)
+
     if args.bootstrap_cols > -1:
         ## xdata = xdata.sample(n=args.bootstrap_cols, axis=1, random_state=SEED)  # Take a subset of cols
         y_tmp = data_train.iloc[:,0]

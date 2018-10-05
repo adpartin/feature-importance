@@ -40,18 +40,23 @@ sys.path.append(pfi_path)
 import pfi
 import pfi_utils
 
-DATAPATH_CLASSIFICATION = os.path.join(file_path, 'data', 'data_classification_corr')
-DATAPATH_REGRESSION = os.path.join(file_path, 'data', 'data_regression_corr')
-OUTDIR = os.path.join(file_path, 'results_test_pfi')
 # DATAPATH_CLASSIFICATION = os.path.join(file_path, 'data', 'data_classification')
 # DATAPATH_REGRESSION = os.path.join(file_path, 'data', 'data_regression')
-# OUTDIR = os.path.join(file_path, 'test_results_col_sets')
+
+DATAPATH_CLASSIFICATION_TRAIN = os.path.join(file_path, 'data', 'data_classification_train')
+DATAPATH_CLASSIFICATION_VAL = os.path.join(file_path, 'data', 'data_classification_val')
+DATAPATH_REGRESSION_TRAIN = os.path.join(file_path, 'data', 'data_regression_train')
+DATAPATH_REGRESSION_VAL = os.path.join(file_path, 'data', 'data_regression_val')
+
+# DATAPATH_CLASSIFICATION = os.path.join(file_path, 'data', 'data_classification_corr')
+# DATAPATH_REGRESSION = os.path.join(file_path, 'data', 'data_regression_corr')
+OUTDIR = os.path.join(file_path, 'results_test_pfi')
 N_SHUFFLES = 20
 CORR_THRES = 0.74
 EPOCH = 60
 BATCH = 32
 MAX_COLS = 20
-SEED = 42
+SEED = 0
 
 
 def create_nn_classifier(n_features, n_classes):
@@ -105,27 +110,27 @@ def run(args):
     # Create necessary dirs
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
-    
-    # ==========  RF classifier  ==========
+
+    # ==========  Load classification data  ==========
     print('\nLoad classification data ...')
 
-    # ---------- Load data ----------
-    data = pd.read_csv(DATAPATH_CLASSIFICATION, sep='\t')
-    xdata = data.iloc[:, 1:].copy()
-    ydata = data.iloc[:, 0].copy()
-    features = xdata.columns
+    data_train = pd.read_csv(DATAPATH_CLASSIFICATION_TRAIN, sep='\t')
+    data_val   = pd.read_csv(DATAPATH_CLASSIFICATION_VAL, sep='\t')
+    print('data_train.shape', data_train.shape)
+    print('data_val.shape  ', data_val.shape)
+    print('data_train:\n', data_train.iloc[:3, :4])
+    print('data_val:\n', data_val.iloc[:3, :4])
 
-    print('data.shape', data.shape)
-    print(data.iloc[:3, :4])
 
-    print('\nxdata.shape', xdata.shape)
-    print('np.unique(ydata)', np.unique(ydata))
+    # ==========  RF classifier  ==========
+    print('\n =======  RF classifier  =======')
 
-    scaler = StandardScaler()
-    xdata = scaler.fit_transform(xdata)
-    xdata = pd.DataFrame(xdata, columns=features)
-
-    xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True, stratify=ydata)
+    xtr = data_train.iloc[:, 1:].copy()
+    ytr = data_train.iloc[:, 0].copy()
+    xvl = data_val.iloc[:, 1:].copy()
+    yvl = data_val.iloc[:, 0].copy()
+    features = xtr.columns
+    print('np.unique(ytr)', np.unique(ytr))
 
     # Compute corr matrix
     cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
@@ -139,17 +144,18 @@ def run(args):
     print(f'Prediction score (mean accuracy): {rf_model.score(xvl, yvl):.4f}')
 
     yvl_preds = rf_model.predict(xvl)
-    # yvl_preds_proba = rf_model.predict_proba(xvl)
-    print('true', yvl[:10].values)
-    print('pred', yvl_preds[:10])
-    # print('yvl_preds_proba', yvl_preds_proba[:10])
+    print('true', yvl[:5].values)
+    print('pred', yvl_preds[:5])
     print('f1_score micro: {:.3f}'.format(f1_score(y_true=yvl, y_pred=yvl_preds, average='micro')))
     print('f1_score macro: {:.3f}'.format(f1_score(y_true=yvl, y_pred=yvl_preds, average='macro')))
 
-    # ---------- Feature importance from RF and PFI ----------
+    yvl_preds_p = rf_model.predict_proba(xvl)
+    print('yvl_preds_p\n', yvl_preds_p[:10])
+
+    # ---------- FI from RF and PFI ----------
     # Plot RF FI
     indices, fig = utils.plot_rf_fi(rf_model, columns=features, title='RF Classifier (FI using MDI)')
-    fig.savefig(os.path.join(OUTDIR, 'rf_classifier_fi.png'), bbox_inches='tight')
+    fig.savefig(os.path.join(OUTDIR, 'rf_classifier_fi.png'), bbox_inches='tight') 
 
     # PFI
     print('\nCompute PFI (RF classifier) ...')
@@ -160,18 +166,21 @@ def run(args):
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
-    fig = fi_obj.plot_var_fi(title='RF Classifier (PFI var)', ylabel='Importance (relative)')
+    fig = fi_obj.plot_var_fi(title='RF Classifier (PFI var)')
     fig.savefig(os.path.join(OUTDIR, 'rf_classifier_pfi_var.png'), bbox_inches='tight')
-    fig = fi_obj.plot_score_fi(title='RF Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
+
+    fig = fi_obj.plot_score_fi(title='RF Classifier (PFI MDA: f1-score)')
     fig.savefig(os.path.join(OUTDIR, 'rf_classifier_pfi_score.png'), bbox_inches='tight')
+    
+    fig = fi_obj.plot_score_fi_p(title='RF Classifier (PFI MDA: p-score)')
+    fig.savefig(os.path.join(OUTDIR, 'rf_classifier_pfi_score_p.png'), bbox_inches='tight')
 
     # Dump resutls
     fi_obj.dump(path=OUTDIR, name='rf_classifier')
 
 
-
     # ==========  NN classifier  ==========
-    print('\nLoad classification data ...')
+    # print('\nLoad classification data ...')
 
      # ---------- Load data ----------
     # data = pd.read_csv(DATAPATH_CLASSIFICATION, sep='\t')
@@ -194,59 +203,66 @@ def run(args):
 
     # xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True, stratify=ydata)
     
-    n_classes = len(np.unique(ydata))
-    ytr = keras.utils.to_categorical(ytr, num_classes=n_classes)
-    yvl = keras.utils.to_categorical(yvl, num_classes=n_classes)
+    # n_classes = len(np.unique(ydata))
+    # ytr = keras.utils.to_categorical(ytr, num_classes=n_classes)
+    # yvl = keras.utils.to_categorical(yvl, num_classes=n_classes)
 
-    print('\nTrain NN Classifier ...')
-    keras_model = create_nn_classifier(n_features=xtr.shape[1], n_classes=n_classes)
-    history = keras_model.fit(xtr, ytr, epochs=epoch, batch_size=batch, verbose=0)
-    score = keras_model.evaluate(xvl, yvl, verbose=False)[-1]  # compute the val loss
-    print(f'Prediction score (val loss): {score:.4f}')
+    # print('\nTrain NN Classifier ...')
+    # keras_model = create_nn_classifier(n_features=xtr.shape[1], n_classes=n_classes)
+    # history = keras_model.fit(xtr, ytr, epochs=epoch, batch_size=batch, verbose=0)
+    # score = keras_model.evaluate(xvl, yvl, verbose=False)[-1]  # compute the val loss
+    # print(f'Prediction score (val loss): {score:.4f}')
 
-    yvl_preds = keras_model.predict(xvl)
-    print('true', np.argmax(yvl[:10], axis=1))
-    print('pred', np.argmax(yvl_preds[:10, :], axis=1))
-    print('f1_score micro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='micro')))
-    print('f1_score macro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='macro')))
+    # yvl_preds = keras_model.predict(xvl)
+    # print('true', np.argmax(yvl[:10], axis=1))
+    # print('pred', np.argmax(yvl_preds[:10, :], axis=1))
+    # print('f1_score micro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='micro')))
+    # print('f1_score macro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='macro')))
 
-    # ---------- Feature importance from RF and PFI ----------
-    # PFI
-    print('\nCompute PFI (NN classifier) ...')
-    t0 = time.time()
-    fi_obj = pfi.PFI(model=keras_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
-    fi_obj.gen_col_sets(th=corr_th, toplot=False)
-    fi_obj.compute_pfi(ml_type='c', verbose=False)
-    print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
+    # # ---------- Feature importance from RF and PFI ----------
+    # # PFI
+    # print('\nCompute PFI (NN classifier) ...')
+    # t0 = time.time()
+    # fi_obj = pfi.PFI(model=keras_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
+    # fi_obj.gen_col_sets(th=corr_th, toplot=False)
+    # fi_obj.compute_pfi(ml_type='c', verbose=False)
+    # print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
-    # Plot and save PFI
-    fig = fi_obj.plot_var_fi(title='NN Classifier (PFI var)', ylabel='Importance (relative)')
-    fig.savefig(os.path.join(OUTDIR, 'nn_classifier_pfi_var.png'), bbox_inches='tight')
-    fig = fi_obj.plot_score_fi(title='NN Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
-    fig.savefig(os.path.join(OUTDIR, 'nn_classifier_pfi_score.png'), bbox_inches='tight')
+    # # Plot and save PFI
+    # fig = fi_obj.plot_var_fi(title='NN Classifier (PFI var)', ylabel='Importance (relative)')
+    # fig.savefig(os.path.join(OUTDIR, 'nn_classifier_pfi_var.png'), bbox_inches='tight')
+    # fig = fi_obj.plot_score_fi(title='NN Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
+    # fig.savefig(os.path.join(OUTDIR, 'nn_classifier_pfi_score.png'), bbox_inches='tight')
 
-    # Dump resutls
-    fi_obj.dump(path=OUTDIR, name='nn_classifier')
+    # # Dump resutls
+    # fi_obj.dump(path=OUTDIR, name='nn_classifier')
 
+
+    # ==========  Load regression data  ==========
+    print('\nLoad regression data ...')
+
+    data_train = pd.read_csv(DATAPATH_REGRESSION_TRAIN, sep='\t')
+    data_val   = pd.read_csv(DATAPATH_REGRESSION_VAL, sep='\t')
+    print('data_train.shape', data_train.shape)
+    print('data_val.shape  ', data_val.shape)
+    print('data_train:\n', data_train.iloc[:3, :4])
+    print('data_val:\n', data_val.iloc[:3, :4])
 
 
     # ==========  RF regressor  ==========
-    print('\nLoad regression data ...')
+    print('\n =======  RF regressor  =======')
 
-    # ---------- Load data ----------
-    data = pd.read_csv(DATAPATH_REGRESSION, sep='\t')
-    xdata = data.iloc[:, 1:].copy()
-    ydata = data.iloc[:, 0].copy()
-    features = xdata.columns
+    xtr = data_train.iloc[:, 1:].copy()
+    ytr = data_train.iloc[:, 0].copy()
+    xvl = data_val.iloc[:, 1:].copy()
+    yvl = data_val.iloc[:, 0].copy()
+    features = xtr.columns
+    print('np.unique(ytr)', np.unique(ytr))
 
-    print('data.shape', data.shape)
-    print(data.iloc[:3, :4])
-
-    scaler = StandardScaler()
-    xdata = scaler.fit_transform(xdata)
-    xdata = pd.DataFrame(xdata, columns=features)
-
-    xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True)
+    # Compute corr matrix
+    cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
+    fig = utils.plot_cor_heatmap(cor)
+    fig.savefig(os.path.join(OUTDIR, 'feature_corr_regression.png'), bbox_inches='tight')
 
     # ---------- Train regressor ----------
     print('\nTrain RF Regressor ...')
@@ -254,17 +270,6 @@ def run(args):
     rf_model.fit(xtr, ytr)
     score = rf_model.score(xvl, yvl)
     print(f'Prediction score (r_square): {score:.4f}')
-
-    # print('\nTrain NN Regressor...')
-    # keras_model = create_nn_regressor(n_features=xtr.shape[1])
-    # history = keras_model.fit(xtr, ytr, epochs=epochs, batch_size=batch, verbose=0)
-    # score = keras_model.evaluate(xvl, yvl, verbose=False)[-1]  # compute the val loss
-    # print(f'Prediction score (val loss): {score:.4f}')
-
-    # Compute corr matrix
-    cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
-    fig = utils.plot_cor_heatmap(cor)
-    fig.savefig(os.path.join(OUTDIR, 'feature_corr_regression.png'), bbox_inches='tight')
 
     # ---------- Feature importance from RF and PFI ----------
     # Plot RF FI
@@ -280,9 +285,9 @@ def run(args):
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
-    fig = fi_obj.plot_var_fi(title='RF Regressor (PFI var)', ylabel='Importance (relative)')
+    fig = fi_obj.plot_var_fi(title='RF Regressor (PFI var)')
     fig.savefig(os.path.join(OUTDIR, 'rf_regressor_pfi_var.png'), bbox_inches='tight')
-    fig = fi_obj.plot_score_fi(title='RF Regressor (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
+    fig = fi_obj.plot_score_fi(title='RF Regressor (PFI MDA: f1-score)')
     fig.savefig(os.path.join(OUTDIR, 'rf_regressor_pfi_score.png'), bbox_inches='tight')
 
     # Dump resutls

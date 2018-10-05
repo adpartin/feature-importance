@@ -45,8 +45,10 @@ import pfi_utils
 
 APP = 'tc'
 # DATAPATH = os.path.join(file_path, 'data', f'{APP}_data')
-DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train')
-DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val')
+# DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train')
+# DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val')
+DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train_raw')
+DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val_raw')
 YENC_PATH = os.path.join(file_path, 'data', f'{APP}_y_enc')
 N_SHUFFLES = 20
 CORR_THRES = 0.9
@@ -156,7 +158,8 @@ def run(args):
     max_cols = args.max_cols
 
     # Create necessary dirs
-    OUTDIR = os.path.join(file_path, f'results_aacr_{APP}_cor{corr_th}')
+    dataset = DATAPATH_TR.split('_')[-1]  # TODO: clean/fix
+    OUTDIR = os.path.join(file_path, f'results_aacr_{APP}_{dataset}_cor{corr_th}')
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
     logger = set_logger(filename=os.path.join(OUTDIR, f'{APP}_main_logfile.log'))
@@ -165,7 +168,6 @@ def run(args):
     # ==========  Load data  ==========
     print('\nLoad TC data ...')
 
-    # ---------- Load data ----------
     y_enc = pd.read_csv(YENC_PATH, sep='\t')
     ## data = pd.read_csv(DATAPATH, sep='\t')
     ## xdata = data.iloc[:, 1:].copy()

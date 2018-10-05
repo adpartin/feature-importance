@@ -20,7 +20,7 @@ import pfi
 import pfi_utils
 
 APP = 'nt'
-DATAPATH = '/Users/apartin/work/jdacs/Benchmarks/Data/Pilot1/'
+DATAPATH = '/vol/ml/apartin/Benchmarks/Data/Pilot1'
 FILENAME = 'matched_normal_samples.FPKM-UQ.log-transformed.csv'
 GENEMAPFILE = 'lincs1000.tsv'
 OUTDIR = os.path.join(file_path, 'data')

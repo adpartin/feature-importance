@@ -6,6 +6,9 @@ import string
 import argparse
 import numpy as np
 import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import *
 
 file_path = os.path.dirname(os.path.relpath(__file__))
@@ -15,10 +18,10 @@ import utils_all as utils
 
 OUTDIR = os.path.join(file_path, 'data')
 N_SAMPLES = 2000
-N_CLASSES = 2
+N_CLASSES = 3
 N_FEATURES = 10
 N_INFORMATIVE = 5
-N_REDUNDANT = 2
+N_REDUNDANT = 0
 N_REPEATED = 0
 SEED = 0
 
@@ -51,7 +54,7 @@ def run(args):
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
     # Build classification dataset
-    print('\nGenerate classification dataset...')
+    print('\nGenerate classification data ...')
     xdata, ydata = make_classification(n_samples=n_samples,
                                        n_classes=n_classes,
                                        n_features=n_features,
@@ -68,17 +71,33 @@ def run(args):
     xdata = pd.DataFrame(xdata, columns=[c for c in string.ascii_uppercase[:xdata.shape[1]]])
     df = pd.concat([ydata, xdata], axis=1)
 
-    print('df.shape', df.shape)
+    features = xdata.columns
+    scaler = StandardScaler()
+    xdata = scaler.fit_transform(xdata)
+    xdata = pd.DataFrame(xdata, columns=features)
+
+    xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True, stratify=ydata)
+    data_train = pd.concat([ytr, xtr], axis=1)
+    data_val = pd.concat([yvl, xvl], axis=1)
+
+    print('df.shape        ', df.shape)
+    print('data_train.shape', data_train.shape)
+    print('data_val.shape  ', data_val.shape)
     print(df.iloc[:3, :4])
+
 
     if (N_REDUNDANT == 0) and (N_REPEATED == 0):
         df.to_csv(os.path.join(OUTDIR, 'data_classification'), sep='\t', float_format=np.float16, index=False)
+        data_train.to_csv(os.path.join(OUTDIR, 'data_classification_train'), sep='\t', float_format=np.float16, index=False)
+        data_val.to_csv(os.path.join(OUTDIR, 'data_classification_val'), sep='\t', float_format=np.float16, index=False)
     else:
         df.to_csv(os.path.join(OUTDIR, 'data_classification_corr'), sep='\t', float_format=np.float16, index=False)
-        
+        data_train.to_csv(os.path.join(OUTDIR, 'data_classification_corr_train'), sep='\t', float_format=np.float16, index=False)
+        data_val.to_csv(os.path.join(OUTDIR, 'data_classification_corr_val'), sep='\t', float_format=np.float16, index=False)
+
 
     # Build regression dataset
-    print('\nGenerate regression dataset...')
+    print('\nGenerate regression data ...')
     xdata, ydata = make_regression(n_samples=n_samples,
                                    n_targets=1,
                                    n_features=n_features,
@@ -96,13 +115,28 @@ def run(args):
     xdata = pd.DataFrame(xdata, columns=[c for c in string.ascii_uppercase[:xdata.shape[1]]])
     df = pd.concat([ydata, xdata], axis=1)
 
-    print('df.shape', df.shape)
+    features = xdata.columns
+    scaler = StandardScaler()
+    xdata = scaler.fit_transform(xdata)
+    xdata = pd.DataFrame(xdata, columns=features)
+
+    xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True)
+    data_train = pd.concat([ytr, xtr], axis=1)
+    data_val = pd.concat([yvl, xvl], axis=1)
+
+    print('df.shape        ', df.shape)
+    print('data_train.shape', data_train.shape)
+    print('data_val.shape  ', data_val.shape)
     print(df.iloc[:3, :4])
 
     if (N_REDUNDANT == 0) and (N_REPEATED == 0):
         df.to_csv(os.path.join(OUTDIR, 'data_regression'), sep='\t', float_format=np.float16, index=False)
+        data_train.to_csv(os.path.join(OUTDIR, 'data_regression_train'), sep='\t', float_format=np.float16, index=False)
+        data_val.to_csv(os.path.join(OUTDIR, 'data_regression_val'), sep='\t', float_format=np.float16, index=False)        
     else:
         df.to_csv(os.path.join(OUTDIR, 'data_regression_corr'), sep='\t', float_format=np.float16, index=False)
+        data_train.to_csv(os.path.join(OUTDIR, 'data_regression_corr_train'), sep='\t', float_format=np.float16, index=False)
+        data_val.to_csv(os.path.join(OUTDIR, 'data_regression_corr_val'), sep='\t', float_format=np.float16, index=False)        
 
 
 def main():

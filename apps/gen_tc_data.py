@@ -30,7 +30,8 @@ def run():
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
     # Load data
-    df_rna, meta = utils.load_lincs1000(dataset='combat', sources=['gdc'])
+    dataset = 'raw'
+    df_rna, meta = utils.load_lincs1000(dataset=dataset, sources=['gdc'])
 
     # Specify col name of the target variable (cancer type)
     target_col_name = 'ctype'
@@ -102,8 +103,8 @@ def run():
 
     # Save
     # data.to_csv(os.path.join(OUTDIR, f'{APP}_data'), sep='\t', index=False)
-    data_train.to_csv(os.path.join(OUTDIR, f'{APP}_data_train'), sep='\t', index=False)
-    data_val.to_csv(os.path.join(OUTDIR, f'{APP}_data_val'), sep='\t', index=False)
+    data_train.to_csv(os.path.join(OUTDIR, f'{APP}_data_train_{dataset}'), sep='\t', index=False)
+    data_val.to_csv(os.path.join(OUTDIR, f'{APP}_data_val_{dataset}'), sep='\t', index=False)
 
 
 def main():
