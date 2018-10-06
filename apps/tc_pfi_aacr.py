@@ -43,13 +43,23 @@ sys.path.append(pfi_path)
 import pfi
 import pfi_utils
 
-APP = 'tc'
+import warnings
+warnings.filterwarnings('ignore')
+
+APP = 'P1B1'
 # DATAPATH = os.path.join(file_path, 'data', f'{APP}_data')
 # DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train')
 # DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val')
-DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train_raw')
-DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val_raw')
-YENC_PATH = os.path.join(file_path, 'data', f'{APP}_y_enc')
+
+# DATAPATH_TR = os.path.join(file_path, 'data', f'{APP}_data_train_raw')
+# DATAPATH_VL = os.path.join(file_path, 'data', f'{APP}_data_val_raw')
+# YENC_PATH = os.path.join(file_path, 'data', f'{APP}_y_enc')
+
+# Benchmark TC data for FI (by FF)
+DATAPATH_TR = os.path.join(file_path, 'data', f'P1B1.dev.train.lincs.ap')
+DATAPATH_VL = os.path.join(file_path, 'data', f'P1B1.dev.test.lincs.ap')
+YENC_PATH = os.path.join(file_path, 'data', f'P1B1.y.enc.ap')
+
 N_SHUFFLES = 20
 CORR_THRES = 0.9
 EPOCH = 60
@@ -158,16 +168,15 @@ def run(args):
     max_cols = args.max_cols
 
     # Create necessary dirs
-    dataset = DATAPATH_TR.split('_')[-1]  # TODO: clean/fix
-    OUTDIR = os.path.join(file_path, f'results_aacr_{APP}_{dataset}_cor{corr_th}')
+    # dataset = DATAPATH_TR.split('_')[-1]  # TODO: clean/fix
+    OUTDIR = os.path.join(file_path, f'results_{APP}_cor{corr_th}')
     utils.make_dir(OUTDIR)  # os.makedirs(OUTDIR, exist_ok=True)
 
     logger = set_logger(filename=os.path.join(OUTDIR, f'{APP}_main_logfile.log'))
 
 
     # ==========  Load data  ==========
-    print('\nLoad TC data ...')
-
+    print('\n======= Load TC data =======')
     y_enc = pd.read_csv(YENC_PATH, sep='\t')
     ## data = pd.read_csv(DATAPATH, sep='\t')
     ## xdata = data.iloc[:, 1:].copy()
@@ -185,19 +194,6 @@ def run(args):
         data_val = data_val[data_train.columns]
     print(f'\ndata_train.shape {data_train.shape}')
     print(f'data_val.shape   {data_val.shape}')    
-    ##features = xdata.columns
-
-    ##print('data.shape', data.shape)
-    ##print(data.iloc[:3, :4])
-
-    ##print('\nxdata.shape', xdata.shape)
-    ##print('np.unique(ydata)', np.unique(ydata))
-
-    ##scaler = StandardScaler()
-    ##xdata = scaler.fit_transform(xdata)
-    ##xdata = pd.DataFrame(xdata, columns=features)
-
-    ##xtr, xvl, ytr, yvl = train_test_split(xdata, ydata, test_size=0.2, random_state=SEED, shuffle=True, stratify=ydata)
 
     # Compute corr matrix
     # cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
@@ -262,23 +258,20 @@ def run(args):
     # model = best_model
 
     # ==========  RF classifier  ==========
-    logger.info('RF classifier ...')
-    logger.info('-----------------')
-
-    # ---------- Get the data ----------
     xtr = data_train.iloc[:, 1:].copy()
     ytr = data_train.iloc[:, 0].copy()
     xvl = data_val.iloc[:, 1:].copy()
     yvl = data_val.iloc[:, 0].copy()
     features = xtr.columns
+    print(f'\nnp.unique(ytr): {np.unique(ytr)}')
     logger.info(f'xtr.shape {xtr.shape}')
     logger.info(f'xvl.shape {xvl.shape}')
     logger.info(f'ytr.shape {ytr.shape}')
     logger.info(f'yvl.shape {yvl.shape}')
 
     # ---------- Train RF classifier ----------
-    logger.info(f'Train RF Classifier ...')
-    rf_model = RandomForestClassifier(n_estimators=200, max_features='sqrt', random_state=SEED)
+    logger.info('------- Train RF Classifier -------')
+    rf_model = RandomForestClassifier(n_estimators=200, min_samples_leaf=5, max_features='sqrt', random_state=SEED)
     rf_model.fit(xtr, ytr)
     logger.info(f'Prediction score (mean accuracy): {rf_model.score(xvl, yvl):.4f}')
 
@@ -288,19 +281,19 @@ def run(args):
     logger.info('f1_score micro: {:.3f}'.format(f1_score(y_true=yvl, y_pred=yvl_preds, average='micro')))
     logger.info('f1_score macro: {:.3f}'.format(f1_score(y_true=yvl, y_pred=yvl_preds, average='macro')))
 
-    # TODO: finish this ...
-    # df_conf = utils.plot_confusion_matrix(y_true=yvl, y_pred=yvl_preds, labels=y_enc['type'].values,
-    #                                       title=f'{APP}_confusion', savefig=True, img_name=f'{APP}_confusion')
+    utils.plot_confusion_matrix(y_true=yvl, y_pred=yvl_preds, labels=y_enc['type'].values,
+                                title=f'{APP}_confusion', savefig=True,
+                                img_name=os.path.join(OUTDIR, f'{APP}_confusion.png'))
 
-    # ---------- Feature importance ----------
+    # ---------- MDI and PFI from RF ----------
+    print('\n------- MDI and PFI from RF classifier -------')
     # Plot RF FI
     indices, fig = utils.plot_rf_fi(rf_model, columns=features, max_cols=max_cols, title='RF Classifier (FI using MDI)')
-    rf_fi = utils.get_rf_fi(rf_model, columns=features)
-    rf_fi.to_csv(os.path.join(OUTDIR, f'{APP}_rf_fi.csv'), index=False)
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_fi.png'), bbox_inches='tight')
+    rf_fi = utils.get_rf_fi(rf_model, columns=features)
+    rf_fi.to_csv(os.path.join(OUTDIR, f'{APP}_rf_fi.csv'), index=False)    
 
     # PFI
-    logger.info('Compute PFI ...')
     t0 = time.time()
     fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
@@ -308,67 +301,71 @@ def run(args):
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
     # Plot and save PFI
-    fig = fi_obj.plot_var_fi(max_cols=max_cols, title='RF Classifier (PFI var)', ylabel='Importance (relative)')
+    fig = fi_obj.plot_var_fi(max_cols=max_cols, title='RF Classifier (PFI var)')
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_pfi_var.png'), bbox_inches='tight')
-    fig = fi_obj.plot_score_fi(max_cols=max_cols, title='RF Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
+
+    fig = fi_obj.plot_score_fi(max_cols=max_cols, title='RF Classifier (PFI MDA: f1-score)')
     fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_pfi_score.png'), bbox_inches='tight')
+    
+    # fig = fi_obj.plot_score_fi_p(max_cols=max_cols, title='RF Classifier (PFI MDA: p-score)')
+    # fig.savefig(os.path.join(OUTDIR, f'{APP}_rf_pfi_score_p.png'), bbox_inches='tight')
 
     # Dump resutls
     fi_obj.dump(path=OUTDIR, name=f'{APP}_rf')
 
 
-    # ==========  NN classifier  ==========
-    logger.info('                 ')
-    logger.info('NN classifier ...')
-    logger.info('-----------------')
+    # # ==========  NN classifier  ==========
+    # logger.info('                 ')
+    # logger.info('NN classifier ...')
+    # logger.info('-----------------')
 
-    # ---------- Get the data ----------
-    xtr = data_train.iloc[:, 1:].copy()
-    ytr = data_train.iloc[:, 0].copy()
-    xvl = data_val.iloc[:, 1:].copy()
-    yvl = data_val.iloc[:, 0].copy()
-    features = xtr.columns
-    logger.info(f'xtr.shape {xtr.shape}')
-    logger.info(f'xvl.shape {xvl.shape}')
-    logger.info(f'ytr.shape {ytr.shape}')
-    logger.info(f'yvl.shape {yvl.shape}')
+    # # ---------- Get the data ----------
+    # xtr = data_train.iloc[:, 1:].copy()
+    # ytr = data_train.iloc[:, 0].copy()
+    # xvl = data_val.iloc[:, 1:].copy()
+    # yvl = data_val.iloc[:, 0].copy()
+    # features = xtr.columns
+    # logger.info(f'xtr.shape {xtr.shape}')
+    # logger.info(f'xvl.shape {xvl.shape}')
+    # logger.info(f'ytr.shape {ytr.shape}')
+    # logger.info(f'yvl.shape {yvl.shape}')
     
-    n_classes = len(np.unique(ytr))
-    ytr = keras.utils.to_categorical(ytr, num_classes=n_classes)
-    yvl = keras.utils.to_categorical(yvl, num_classes=n_classes)
+    # n_classes = len(np.unique(ytr))
+    # ytr = keras.utils.to_categorical(ytr, num_classes=n_classes)
+    # yvl = keras.utils.to_categorical(yvl, num_classes=n_classes)
 
-     # ---------- Train NN classifier ----------
-    logger.info('Training NN Classifier...')
-    keras_model = create_nn_classifier(n_features=xtr.shape[1], n_classes=n_classes)
-    history = keras_model.fit(xtr, ytr, epochs=epoch, batch_size=batch, verbose=0)
-    # utils.plot_keras_learning(history, figsize = (10, 8), savefig=True,
-    #                           img_name=os.path.join(OUTDIR, 'learning_with_lr'))
-    score = keras_model.evaluate(xvl, yvl, verbose=False)[-1]  # compute the val loss
-    logger.info('Prediction score (val loss): {:.4f}'.format(score))
+    #  # ---------- Train NN classifier ----------
+    # logger.info('Training NN Classifier...')
+    # keras_model = create_nn_classifier(n_features=xtr.shape[1], n_classes=n_classes)
+    # history = keras_model.fit(xtr, ytr, epochs=epoch, batch_size=batch, verbose=0)
+    # # utils.plot_keras_learning(history, figsize = (10, 8), savefig=True,
+    # #                           img_name=os.path.join(OUTDIR, 'learning_with_lr'))
+    # score = keras_model.evaluate(xvl, yvl, verbose=False)[-1]  # compute the val loss
+    # logger.info('Prediction score (val loss): {:.4f}'.format(score))
     
-    yvl_preds = keras_model.predict(xvl)
-    print('true', np.argmax(yvl[:10], axis=1))
-    print('pred', np.argmax(yvl_preds[:10, :], axis=1))
-    logger.info('f1_score micro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='micro')))
-    logger.info('f1_score macro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='macro')))
+    # yvl_preds = keras_model.predict(xvl)
+    # print('true', np.argmax(yvl[:10], axis=1))
+    # print('pred', np.argmax(yvl_preds[:10, :], axis=1))
+    # logger.info('f1_score micro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='micro')))
+    # logger.info('f1_score macro: {:.3f}'.format(f1_score(y_true=np.argmax(yvl, axis=1), y_pred=np.argmax(yvl_preds, axis=1), average='macro')))
     
-    # ---------- Feature importance ----------
-    # PFI
-    logger.info('Compute PFI ...')
-    t0 = time.time()
-    fi_obj = pfi.PFI(model=keras_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
-    fi_obj.gen_col_sets(th=corr_th, toplot=False)
-    fi_obj.compute_pfi(ml_type='c', verbose=True)
-    print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
+    # # ---------- Feature importance ----------
+    # # PFI
+    # logger.info('Compute PFI ...')
+    # t0 = time.time()
+    # fi_obj = pfi.PFI(model=keras_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
+    # fi_obj.gen_col_sets(th=corr_th, toplot=False)
+    # fi_obj.compute_pfi(ml_type='c', verbose=True)
+    # print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
 
-    # Plot and save PFI
-    fig = fi_obj.plot_var_fi(max_cols=max_cols, title='NN Classifier (PFI var)', ylabel='Importance (relative)')
-    fig.savefig(os.path.join(OUTDIR, f'{APP}_nn_pfi_var.png'), bbox_inches='tight')
-    fig = fi_obj.plot_score_fi(max_cols=max_cols, title='NN Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
-    fig.savefig(os.path.join(OUTDIR, f'{APP}_nn_pfi_score.png'), bbox_inches='tight')
+    # # Plot and save PFI
+    # fig = fi_obj.plot_var_fi(max_cols=max_cols, title='NN Classifier (PFI var)', ylabel='Importance (relative)')
+    # fig.savefig(os.path.join(OUTDIR, f'{APP}_nn_pfi_var.png'), bbox_inches='tight')
+    # fig = fi_obj.plot_score_fi(max_cols=max_cols, title='NN Classifier (PFI MDA: f1-score)', ylabel='Importance (score decrease)')
+    # fig.savefig(os.path.join(OUTDIR, f'{APP}_nn_pfi_score.png'), bbox_inches='tight')
 
-    # Dump resutls
-    fi_obj.dump(path=OUTDIR, name=f'{APP}_nn')
+    # # Dump resutls
+    # fi_obj.dump(path=OUTDIR, name=f'{APP}_nn')
 
 
 def main():

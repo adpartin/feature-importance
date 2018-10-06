@@ -91,7 +91,8 @@ class PFI:
                       Each value in df corresponds to a single sample prediction (row) for a given shuffle (col).
                       Statistics (mean, std) across shuffles are then computed.
         """
-        pred_df = pd.DataFrame(index=range(self.xdata.shape[0]), columns=range(self.n_shuffles))
+        pred_df = pd.DataFrame(index=range(self.xdata.shape[0]),
+                               columns=range(self.n_shuffles))
 
         for s in range(self.n_shuffles):
             xdata_shf = self._shuf_cols(self.xdata.copy(), col_set=col_set, seed=None).values
@@ -99,7 +100,6 @@ class PFI:
             preds = self.model.predict(xdata_shf)
             if preds.ndim > 1 and preds.shape[1] > 1:  # if classification, get the class label
                 preds = np.argmax(preds, axis=1)
-            ##preds = self.model.predict_proba(xdata_shf)[:,1]
 
             pred_df.iloc[:, s] = preds
 
@@ -109,28 +109,29 @@ class PFI:
     def _shuf_and_pred_proba(self, col_set):
         """
         TODO: NEW!
-        Shuffle a group of cols multiple times. For each shuffle compute predictions.
-        The predictions will be used compute the mean and std across predictions.
+        Shuffle a group of cols multiple times. For each shuffle compute prediction
+        probabilities. Then, extract the probability for the correct/true class.
         Args:
             col_set : list of column names to shuffle together
         Returns:
-            pred_df : df of predictions of size [self.xdata.shape[0], (self.n_shuffles].
-                      Each value in df corresponds to a single sample prediction (row) for a given shuffle (col).
-                      Statistics (mean, std) across shuffles are then computed.
+            pred_df : df of prediction probabilities of size [self.xdata.shape[0], (self.n_shuffles].
+                      Each value in df corresponds to a prediction probability for the
+                      true label(!) for a given shuffle (col).
         """
-        # pred_df = pd.DataFrame(index=range(self.xdata.shape[0]), columns=range(self.n_shuffles))
+        # if the output is not a vector (e.g., `predict` method in keras predicts the
+        # output probability for each class), then take the label of the class with
+        # the highest probability
+        pred_df = pd.DataFrame(index=range(self.xdata.shape[0]),
+                               columns=range(self.n_shuffles))
         classes = np.unique(self.ydata)
-        pred_df = pd.DataFrame(index=classes, columns=range(self.n_shuffles))
+        ##pred_df = pd.DataFrame(index=classes, columns=range(self.n_shuffles))
 
         for s in range(self.n_shuffles):
             xdata_shf = self._shuf_cols(self.xdata.copy(), col_set=col_set, seed=None).values
-
-            yvl_pred_p = self.model.predict_proba(xdata_shf)
-
+            preds_p = self.model.predict_proba(xdata_shf)
             for cl in classes:
                 idx = self.ydata.values == cl
-                yvl_pred_p_cl = yvl_pred_p[idx,:]
-                pred_df.iloc[cl, s] = yvl_pred_p_cl[:, cl].mean()
+                pred_df.iloc[idx, s] = preds_p[idx, cl]
 
         return pred_df
 
@@ -210,7 +211,7 @@ class PFI:
         self.col_sets = cols_sets_chosen
 
         if verbose:
-            print(f'Corr matrix after removing features shape:  {cor.shape}')
+            print(f'Corr matrix after removing features:  {cor.shape}')
             print(f'Time to compute cliques:  {(time.time()-t0)/60:.2f} min')
 
         if toplot:
@@ -251,53 +252,65 @@ class PFI:
         Returns:
             fi (df) : feature importance dataframe with columns 'cols' (column names) and 'imp' (relative importance)
         """
-        # Get a subset of columns
+        # Use unique cols or combine with col sets
         if hasattr(self, 'col_sets'):
-            # col_sets = self._get_col_sets_to_use(col_sets=self.cliques)
             col_sets = self.col_sets
         else:
             col_sets = [[c] for c in self.xdata.columns.tolist()]
 
-        # Create df to store feature importance
+        # Create df to store fi
         fi_score = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp', 'std'])
         fi_var = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp'])
         
-        # TODO: NEW! this is for classification proba
         if ml_type == 'c':
             classes = np.unique(self.ydata.values)
             fi_score_p = pd.DataFrame(index=range(len(col_sets)),
                                       columns=['cols', 'n'] + ['imp_c'+str(c) for c in classes])
+            fi_score_pmap = pd.DataFrame(index=range(self.xdata.shape[0]))
+                                         # columns=range(len(col_sets)))
 
-        # ===============================================================
-        #     Compute reference/baseline score (required for MDA/MDS)
-        # ===============================================================
-        # Compute predictions
-        preds = self.model.predict(self.xdata)
-        if preds.ndim > 1 and preds.shape[1] > 1:  # if classification, get the class label
-            preds = np.argmax(preds, axis=1)
-
-        if self.ydata.ndim > 1 and self.ydata.shape[1] > 1:  # if classification, get the class label
+        # =======  Compute reference/baseline score (required for MDA/MDS)  =======
+        # If classification, the target values might be onehot encoded.
+        # Then, get the true target class labels.
+        if self.ydata.ndim > 1 and self.ydata.shape[1] > 1:
             ydata = np.argmax(self.ydata, axis=1)
         else:
             ydata = self.ydata
 
-        # Compute the reference/baseline score (classification or regression)
+        # Compute predictions
+        ref_preds = self.model.predict(self.xdata)
+        # if the output is not a vector (e.g., `predict` method in keras predicts the
+        # output probability for each class), then take the label of the class with
+        # the highest probability
+        if ref_preds.ndim > 1 and ref_preds.shape[1] > 1:
+            ref_preds = np.argmax(ref_preds, axis=1)
+
+        # Compute reference/baseline score (classification or regression)
         if ml_type == 'c':
             self.ml_type = 'c'
-            ref_score = f1_score(y_true=ydata, y_pred=preds, average='micro')
-            # ref_score = f1_score(y_true=ydata, y_pred=preds, average='macro')
+            ref_score = f1_score(y_true=ydata, y_pred=ref_preds, average='micro')
+            # ref_score = f1_score(y_true=ydata, y_pred=ref_preds, average='macro')
 
             # TODO: NEW! classification proba
-            yvl_pred_p = self.model.predict_proba(self.xdata)
+            # Sort data by label TODO: this must be done before everything!
+            # tmp = pd.concat([self.ydata, self.xdata], axis=1)
+            # tmp = tmp.sort_values(by='y', axis=0).reset_index(drop=True)
+            # self.ydata = tmp.iloc[:,0].copy()
+            # self.xdata = tmp.iloc[:,1:].copy()
+            # Compute reference prediction probabilities
+            ref_preds_p = self.model.predict_proba(self.xdata)  # [samples, classes]
+            ref_preds_p_ = np.zeros((ref_preds_p.shape[0],))    # [samples, ]
             dd = {}
             for cl in classes:
                 idx = self.ydata.values == cl
-                yvl_pred_p_cl = yvl_pred_p[idx,:]
-                dd[cl] = yvl_pred_p_cl[:, cl].mean() 
+                dd[cl] = ref_preds_p[idx, cl].mean()
+                ref_preds_p_[idx] = ref_preds_p[idx, cl]
+            ref_preds_p_ = ref_preds_p_.reshape(-1, 1)
+            # each value in ref_preds_p_ contains the pred probability for the correct label 
 
         elif ml_type == 'r':
             self.ml_type = 'r'
-            ref_score = r2_score(y_true=ydata, y_pred=preds) 
+            ref_score = r2_score(y_true=ydata, y_pred=ref_preds) 
 
         else:
             raise ValueError('ml_type must be either `r` or `c`.')
@@ -305,51 +318,70 @@ class PFI:
 
         # Iter over col sets (col set per node)
         t0 = time.time()
-        pred = np.zeros((self.xdata.shape[0],
-                         len(col_sets),
-                         self.n_shuffles))
-        pred_proba = np.zeros((len(np.unique(self.ydata.values)),
+        pred_arr = np.zeros((self.xdata.shape[0],
+                             len(col_sets),
+                             self.n_shuffles))
+        ##pred_proba = np.zeros((len(np.unique(self.ydata.values)),
+        ##                       len(col_sets),
+        ##                       self.n_shuffles))  # TODO: new for proba
+        pred_arr_p = np.zeros((self.xdata.shape[0],
                                len(col_sets),
-                               self.n_shuffles))  # TODO: new for probabilities
+                               self.n_shuffles))  # TODO: new for proba     
 
         for ci, col_set in enumerate(col_sets):
-            fi_score.loc[ci, 'cols'] = ','.join(col_set)
-            fi_var.loc[ci, 'cols'] = ','.join(col_set)
+            col_set_name = ','.join(col_set)
+            fi_score.loc[ci, 'cols'] = col_set_name
+            fi_var.loc[ci, 'cols'] = col_set_name
 
             fi_score.loc[ci, 'n'] = len(col_set)
             fi_var.loc[ci, 'n'] = len(col_set)
             
             # pred_df = self._shuf_and_pred(col_set)
-            pred[:,ci,:] = self._shuf_and_pred(col_set)
+            pred_arr[:,ci,:] = self._shuf_and_pred(col_set)
 
             # MDA/MDS
             if ml_type == 'c':
                 # score_vec = [f1_score(y_true=ydata, y_pred=pred_df.iloc[:, j], average='micro') for j in range(pred_df.shape[1])]
-                score_vec = [f1_score(y_true=ydata, y_pred=pred[:, ci, j], average='micro') for j in range(pred.shape[2])]
+                score_vec = [f1_score(y_true=ydata, y_pred=pred_arr[:,ci,j], average='micro') for j in range(pred_arr.shape[2])]
 
                 # TODO: NEW!
-                pred_proba[:,ci,:] = self._shuf_and_pred_proba(col_set)  # TODO: new for classification proba
-                fi_score_p.loc[ci, 'cols'] = ','.join(col_set)
-                fi_score_p.loc[ci, 'n'] = len(col_set)
-                for cl in dd.keys():
-                    fi_score_p.loc[ci, 'imp_c'+str(cl)] = dd[cl] - pred_proba[cl,ci,:].mean()
+                pred_arr_p[:,ci,:] = self._shuf_and_pred_proba(col_set)  # TODO: new for proba
+
+                fi_score_pmap[col_set_name] = - pred_arr_p[:,ci,:].mean(axis=1, keepdims=True) + ref_preds_p_
             else:
                 # score_vec = [r2_score(y_true=ydata, y_pred=pred_df.iloc[:, j]) for j in range(pred_df.shape[1])]
-                score_vec = [r2_score(y_true=ydata, y_pred=pred[:, ci, j]) for j in range(pred.shape[1])]
+                score_vec = [r2_score(y_true=ydata, y_pred=pred_arr[:,ci,j]) for j in range(pred_arr.shape[2])]
 
             fi_score.loc[ci, 'imp'] = ref_score - np.array(score_vec).mean()
             fi_score.loc[ci, 'std'] = np.array(score_vec).std()
 
             # VAR
             # fi_var.loc[ci, 'imp'] = pred_df.var(axis=1).mean()
-            fi_var.loc[ci, 'imp'] = np.mean(np.std(pred[:, ci, :], axis=1))
+            fi_var.loc[ci, 'imp'] = np.mean(np.std(pred_arr[:,ci,:], axis=1))
 
             if verbose:
                 if ci % 100 == 0:
                     print(f'col {ci + 1}/{len(col_sets)}')
 
+        # TODO: NEW__
+        # fi_score_p = pred_arr_p.mean(axis=2)  # [samples, col_sets]
+        # tmp = np.ones(fi_score_p.shape)*-100
+        # for f in range(fi_score_p.shape[1]):
+        #     for cl in classes:
+        #         idx = self.ydata.values == cl
+        #         tmp[idx, f] = preds_p[idx, cl]  # get predictions for class cl
+        # fi_score_p = preds_p - tmp
+        # ref_preds_p - fi_score_p
+
+        fi_score_p = - pred_arr_p.mean(axis=2) + ref_preds_p_
+        fi_score_p = pd.DataFrame(fi_score_p, columns=[','.join(c) for c in col_sets])
+
+        self.pred_arr_p = pred_arr_p
+        self.ref_preds_p_ = ref_preds_p_
+        # TODO: NEW__
+
         self.logger.info(f'Time to compute PFI: {(time.time()-t0)/60:.3f} mins')
-        self.pred = np.around(pred, decimals=3)
+        self.pred_arr = np.around(pred_arr, decimals=3)
 
         # MDA/MDS
         self.fi_score = fi_score.sort_values('imp', ascending=False).reset_index(drop=True)
@@ -363,6 +395,7 @@ class PFI:
         # MDA/MDS class proba
         if ml_type == 'c':
             self.fi_score_p = fi_score_p
+            self.fi_score_pmap = fi_score_pmap
 
 
     def _plot_fi(self, fi, figsize=(8, 5), plot_direction='h', max_cols=None, title=None):
@@ -426,14 +459,14 @@ class PFI:
         return fig
 
 
-    def plot_score_fi_p(self, figsize=(8, 5), max_cols=None, title=None):
+    def plot_score_fi_p(self, annot=True, figsize=None, max_cols=None, title=None):
         """ Plot heatmap of fi per class.
         TODO: NEW!
         """
         if hasattr(self, 'fi_score_p'):
             fi = self.fi_score_p
         
-        fontsize = 14
+        fontsize = 8
         if max_cols and int(max_cols) <= fi.shape[0]:
             fi = fi.iloc[:int(max_cols), :]
 
@@ -441,15 +474,20 @@ class PFI:
         mat = mat.set_index('cols')
         mat = mat.drop(columns=['n'])
         mat = pd.DataFrame(np.array(mat.values, dtype=float).T,
-                          columns=mat.index, index=mat.columns, dtype=float)
+                           columns=mat.index, index=mat.columns, dtype=float)
 
-        fig, ax = plt.subplots(figsize=figsize)
-        if title:
-            ax.set_title(title)
+        if figsize is None:
+            sc_x, sc_y = 0.5, 0.5
+            figsize = sc_x * mat.shape[1], sc_y * mat.shape[0]
 
-        sns.heatmap(mat, annot=True, fmt='.2f', linewidths=0.9, linecolor='white',  cmap='coolwarm')
+        fig, ax = plt.subplots(figsize=(sc_x * mat.shape[1], sc_y * mat.shape[0]))
+        sns.heatmap(mat, annot=annot, annot_kws={"size": 8}, fmt='.2f',
+                    linewidths=0.99, linecolor='white',  cmap='coolwarm')
         ax.set_ylabel('Class', fontsize=fontsize)
         ax.set_xlabel('Feature', fontsize=fontsize)
+
+        if title:
+            ax.set_title(title)
 
         self.fig_fi_p = fig
         return fig        
@@ -463,6 +501,7 @@ class PFI:
             var_filename = name + '_fi_var' + '.csv'
             score_filename = name + '_fi_score' + '.csv'
             score_p_filename = name + '_fi_score_p' + '.csv'  # TODO: NEW
+            score_pmap_filename = name + '_fi_score_pmap' + '.csv'  # TODO: NEW
             colset_filename = name + '_colsets' + '.json'
             clique_filename = name + '_cliques' + '.json'
             pred_filename = name + '_pred'
@@ -470,6 +509,7 @@ class PFI:
             var_filename = 'fi_var.csv'
             score_filename = 'fi_score.csv'
             score_p_filename = 'fi_score_p.csv'  # TODO: NEW
+            score_pmap_filename = 'fi_score_pmap.csv'  # TODO: NEW
             colset_filename = 'colsets.json'
             clique_filename = 'cliques.json'
             pred_filename = 'pred'
@@ -488,7 +528,11 @@ class PFI:
 
         # TODO: NEW
         if hasattr(self, 'fi_score_p'):
-            self.fi_score.to_csv(os.path.join(path, score_p_filename), index=False)            
+            self.fi_score_p.to_csv(os.path.join(path, score_p_filename), index=False)
+        
+        # TODO: NEW
+        if hasattr(self, 'fi_score_pmap'):
+            self.fi_score_pmap.to_csv(os.path.join(path, score_pmap_filename), index=False)            
 
         # np.save(os.path.join(path, pred_filename+'.npy'), self.pred, allow_pickle=False)
         # np.savez_compressed(os.path.join(path, pred_filename+'.npz'), self.pred)

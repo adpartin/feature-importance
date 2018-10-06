@@ -20,6 +20,9 @@ sys.path.append(pfi_path)
 import pfi
 import pfi_utils
 
+import warnings
+warnings.filterwarnings('ignore')
+
 APP = 'tc'
 OUTDIR = os.path.join(file_path, 'data')
 SEED = 0

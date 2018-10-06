@@ -40,6 +40,9 @@ sys.path.append(pfi_path)
 import pfi
 import pfi_utils
 
+import warnings
+warnings.filterwarnings('ignore')
+
 # DATAPATH_CLASSIFICATION = os.path.join(file_path, 'data', 'data_classification')
 # DATAPATH_REGRESSION = os.path.join(file_path, 'data', 'data_regression')
 
@@ -112,25 +115,22 @@ def run(args):
 
 
     # ==========  Load classification data  ==========
-    print('\nLoad classification data ...')
-
+    print('\n======== Load classification data ========')
     data_train = pd.read_csv(DATAPATH_CLASSIFICATION_TRAIN, sep='\t')
     data_val   = pd.read_csv(DATAPATH_CLASSIFICATION_VAL, sep='\t')
     print('data_train.shape', data_train.shape)
     print('data_val.shape  ', data_val.shape)
-    print('data_train:\n', data_train.iloc[:3, :4])
-    print('data_val:\n', data_val.iloc[:3, :4])
+    print(f'\ndata_train:\n{data_train.iloc[:3, :4]}')
+    print(f'\ndata_val:\n{data_val.iloc[:3, :4]}')
 
 
     # ==========  RF classifier  ==========
-    print('\n =======  RF classifier  =======')
-
     xtr = data_train.iloc[:, 1:].copy()
     ytr = data_train.iloc[:, 0].copy()
     xvl = data_val.iloc[:, 1:].copy()
     yvl = data_val.iloc[:, 0].copy()
     features = xtr.columns
-    print('np.unique(ytr)', np.unique(ytr))
+    print(f'\nnp.unique(ytr): {np.unique(ytr)}')
 
     # Compute corr matrix
     cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
@@ -138,7 +138,7 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, 'feature_corr_classification.png'), bbox_inches='tight')
 
     # ---------- Train classifier ----------
-    print('\nTrain RF Classifier ...')
+    print('\n------- Train RF Classifier -------')
     rf_model = RandomForestClassifier(n_estimators=200, max_features='sqrt', random_state=SEED)
     rf_model.fit(xtr, ytr)
     print(f'Prediction score (mean accuracy): {rf_model.score(xvl, yvl):.4f}')
@@ -150,17 +150,21 @@ def run(args):
     print('f1_score macro: {:.3f}'.format(f1_score(y_true=yvl, y_pred=yvl_preds, average='macro')))
 
     yvl_preds_p = rf_model.predict_proba(xvl)
-    print('yvl_preds_p\n', yvl_preds_p[:10])
+    print(f'yvl_preds_p:\n{yvl_preds_p[:5]}')
 
-    # ---------- FI from RF and PFI ----------
+    utils.plot_confusion_matrix(y_true=yvl, y_pred=yvl_preds, labels=yvl.unique(),
+                                title=f'RF Classifier (Confusion)', savefig=True,
+                                img_name=os.path.join(OUTDIR, 'rf_classifier_confusion.png'))
+
+    # ---------- MDI and PFI from RF ----------
+    print('\n------- MDI and PFI from RF classifier -------')
     # Plot RF FI
     indices, fig = utils.plot_rf_fi(rf_model, columns=features, title='RF Classifier (FI using MDI)')
     fig.savefig(os.path.join(OUTDIR, 'rf_classifier_fi.png'), bbox_inches='tight') 
 
     # PFI
-    print('\nCompute PFI (RF classifier) ...')
     t0 = time.time()
-    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
+    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='c', verbose=False)
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
@@ -239,25 +243,23 @@ def run(args):
 
 
     # ==========  Load regression data  ==========
-    print('\nLoad regression data ...')
+    print('\n======== Load regression data ========')
 
     data_train = pd.read_csv(DATAPATH_REGRESSION_TRAIN, sep='\t')
     data_val   = pd.read_csv(DATAPATH_REGRESSION_VAL, sep='\t')
     print('data_train.shape', data_train.shape)
     print('data_val.shape  ', data_val.shape)
-    print('data_train:\n', data_train.iloc[:3, :4])
-    print('data_val:\n', data_val.iloc[:3, :4])
+    print(f'\ndata_train:\n{data_train.iloc[:3, :4]}')
+    print(f'\ndata_val:\n{data_val.iloc[:3, :4]}')
 
 
     # ==========  RF regressor  ==========
-    print('\n =======  RF regressor  =======')
-
     xtr = data_train.iloc[:, 1:].copy()
     ytr = data_train.iloc[:, 0].copy()
     xvl = data_val.iloc[:, 1:].copy()
     yvl = data_val.iloc[:, 0].copy()
     features = xtr.columns
-    print('np.unique(ytr)', np.unique(ytr))
+    print(f'\nnp.unique(ytr): {np.unique(ytr)}')
 
     # Compute corr matrix
     cor = utils.compute_cor_mat(xvl, zero_diag=True, decimals=5)
@@ -265,21 +267,21 @@ def run(args):
     fig.savefig(os.path.join(OUTDIR, 'feature_corr_regression.png'), bbox_inches='tight')
 
     # ---------- Train regressor ----------
-    print('\nTrain RF Regressor ...')
-    rf_model = RandomForestRegressor(n_estimators=200, max_features='sqrt', random_state=SEED)
+    print('\n------- Train RF Regressor -------')
+    rf_model = RandomForestRegressor(n_estimators=150, min_samples_leaf=5, max_features='sqrt', random_state=SEED)
     rf_model.fit(xtr, ytr)
     score = rf_model.score(xvl, yvl)
     print(f'Prediction score (r_square): {score:.4f}')
 
     # ---------- Feature importance from RF and PFI ----------
+    print('\n------- MDI and PFI from RF regressor -------')
     # Plot RF FI
     indices, fig = utils.plot_rf_fi(rf_model, columns=features, title='RF Regressor (FI using MDI)')
     fig.savefig(os.path.join(OUTDIR, 'rf_regressor_fi.png'), bbox_inches='tight')
 
     # PFI
-    print('\nCompute PFI (RF regressor) ...')
     t0 = time.time()    
-    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles)
+    fi_obj = pfi.PFI(model=rf_model, xdata=xvl, ydata=yvl, n_shuffles=n_shuffles, outdir=OUTDIR)
     fi_obj.gen_col_sets(th=corr_th, toplot=False)
     fi_obj.compute_pfi(ml_type='r', verbose=False)
     print(f'Total PFI time:  {(time.time()-t0)/60:.3f} mins')
@@ -362,13 +364,13 @@ def run(args):
     # xvl_dum = xvl[:, indices[args.n_important:]]
     #
     # # Build RF using only important features
-    # rf_model_imp = RandomForestClassifier(n_estimators=250, random_state=SEED)
+    # rf_model_imp = RandomForestClassifier(n_estimators=150, min_samples_leaf=5, max_features='sqrt', random_state=SEED)
     # rf_model_imp.fit(xtr_imp, ytr)
     # score = rf_model_imp.score(xvl_imp, yvl)
     # print('Prediction score (using only important features): {:.4f}'.format(score))
     #
     # # Build a forest using the non-important features
-    # rf_model_dum = RandomForestClassifier(n_estimators=250, random_state=SEED)
+    # rf_model_dum = RandomForestClassifier(n_estimators=150, min_samples_leaf=5, max_features='sqrt', random_state=SEED)
     # rf_model_dum.fit(xtr_dum, ytr)
     # score = rf_model_dum.score(xvl_dum, yvl)
     # print('Prediction score (using only non-important features): {:.4f}'.format(score))
