@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import f1_score, r2_score, mean_absolute_error, brier_score_loss
 
+import sklearn
+import keras
+
 file_path = os.path.dirname(os.path.relpath(__file__))
 utils_path = os.path.abspath(os.path.join(file_path, '..', '..', 'utils_py'))
 sys.path.append(utils_path)
@@ -23,18 +26,19 @@ class PFI:
     """ Permutation feature importance.
     Example:
         pfi = PFI(model=ml_model, xdata=X, ydata=y)
-        pfi.compute_importance_score(ml_type='c')
+        pfi.compute_pfi(ml_type='c')
     """
-    def __init__(self, model=None, xdata=None, ydata=None, n_shuffles=5, outdir='.'):
+    def __init__(self, model=None, xdata=None, ydata=None, n_shuffles=5, y_enc=None, outdir='.'):
         """
         Args:
             model : ML model
             xdata : X data (features)
             ydata : Y data (target)
             n_shuffles : number of times to shuffle each feature
+            y_enc : 
         """
         if model is not None:
-            assert hasattr(model, 'predict'), "'model' must have a method 'predict'."
+            assert hasattr(model, 'predict'), "The 'model' must have the method 'predict'."
             self.model = model
 
         if xdata is not None:
@@ -42,9 +46,22 @@ class PFI:
             self.xdata.columns = [str(c) for c in self.xdata.columns]
 
         if ydata is not None:
-            self.ydata = ydata.copy()
+            # If multi-class classification, get only the labels from one-hot
+            # self.ydata = self._adjust_target_var(ydata)
+            if ydata.ndim > 1 and ydata.shape[1] > 1:
+                self.ydata = np.argmax(ydata, axis=1)
+            else:
+                self.ydata = ydata
+            # if isinstance(ydata, pd.DataFrame) is False:
+            #     self.ydata = pd.DataFrame(ydata.copy())
+            # else:
+            #     self.ydata = ydata.copy()
         
         self.n_shuffles = n_shuffles
+
+        if y_enc is not None:
+            self.y_enc = y_enc
+        
 
         # ============  Create logger  ============
         # https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
@@ -65,6 +82,16 @@ class PFI:
         logger.addHandler(fh)
         self.logger = logger
         # =========================================
+
+
+    def _adjust_target_var(target_var):
+        """ Convert multi-dimensional target variable (one-hot encoded or multi-dim array
+        or probabilities) into label. """
+        # if ref_preds.ndim > 1 and ref_preds.shape[1] > 1:
+        #     ref_preds = np.argmax(ref_preds, axis=1)
+        if target_var.ndim > 1 and target_var.shape[1] > 1:
+            target_var = np.argmax(target_var, axis=1)
+        return target_var
 
 
     def _shuf_cols(self, df, col_set, seed=None):
@@ -93,7 +120,7 @@ class PFI:
         """
         pred_df = pd.DataFrame(index=range(self.xdata.shape[0]),
                                columns=range(self.n_shuffles))
-
+        
         for s in range(self.n_shuffles):
             xdata_shf = self._shuf_cols(self.xdata.copy(), col_set=col_set, seed=None).values
 
@@ -124,19 +151,29 @@ class PFI:
         pred_df = pd.DataFrame(index=range(self.xdata.shape[0]),
                                columns=range(self.n_shuffles))
         classes = np.unique(self.ydata)
-        ##pred_df = pd.DataFrame(index=classes, columns=range(self.n_shuffles))
 
         for s in range(self.n_shuffles):
             xdata_shf = self._shuf_cols(self.xdata.copy(), col_set=col_set, seed=None).values
-            preds_p = self.model.predict_proba(xdata_shf)
+
+            ##preds = self.model.predict_proba(xdata_shf)
+
+            if isinstance(self.model, sklearn.ensemble.RandomForestClassifier):
+                preds = self.model.predict_proba(xdata_shf)      
+            elif isinstance(self.model, keras.Sequential):
+                preds = self.model.predict(xdata_shf)
+            else:
+                raise ValueError('Model is not supported.')            
+ 
             for cl in classes:
-                idx = self.ydata.values == cl
-                pred_df.iloc[idx, s] = preds_p[idx, cl]
+                #idx = self.ydata.values == cl
+                idx = self.ydata == cl
+                idx = idx.reshape(-1,)
+                pred_df.iloc[idx, s] = preds[idx, cl]
 
         return pred_df
 
 
-    def gen_col_sets(self, th=0.7, toplot=False, figsize=None, verbose=True):
+    def gen_col_sets(self, th=0.9, toplot=False, figsize=None, verbose=True):
         """ Generate subgroups of mutually correlated features.
         This problem is solved using the graph theory approach.
         First, compute correlation matrix and mask it using a threshold `th`
@@ -225,7 +262,7 @@ class PFI:
         """ Compute permutation feature importance using both:
         1. MDA/MDS: mean decrease in accuracy/score.
         2. VAR: prediction variance
-        
+
         1. MDA/MDS:
         First, compute the prediction score for all samples (this is the reference/baseline score).
         Then, for each col set:
@@ -246,6 +283,9 @@ class PFI:
             This generates a vector of size [n_samples, 1].
         (c) Aggregate the values from part (b) by computing the mean or median.
 
+        3. FI map:
+            TODO: fill in ...
+
         Args:
             ml_type (str) : string that specifies whether it's a classification ('c') or regression ('r') problem
             col_sets (list of lists) : each sublist/subset contains group of featues/cols names
@@ -261,35 +301,35 @@ class PFI:
         # Create df to store fi
         fi_score = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp', 'std'])
         fi_var = pd.DataFrame(index=range(len(col_sets)), columns=['cols', 'n', 'imp'])
+        fimap = pd.DataFrame(index=range(self.xdata.shape[0])) #, columns=range(len(col_sets)))
+        #fi_score_p = pd.DataFrame(index=range(len(col_sets)),
+        #                          columns=['cols', 'n'] + ['imp_c'+str(c) for c in classes])
         
-        if ml_type == 'c':
-            classes = np.unique(self.ydata.values)
-            fi_score_p = pd.DataFrame(index=range(len(col_sets)),
-                                      columns=['cols', 'n'] + ['imp_c'+str(c) for c in classes])
-            fi_score_pmap = pd.DataFrame(index=range(self.xdata.shape[0]))
-                                         # columns=range(len(col_sets)))
 
         # =======  Compute reference/baseline score (required for MDA/MDS)  =======
         # If classification, the target values might be onehot encoded.
         # Then, get the true target class labels.
-        if self.ydata.ndim > 1 and self.ydata.shape[1] > 1:
-            ydata = np.argmax(self.ydata, axis=1)
-        else:
-            ydata = self.ydata
+        # if self.ydata.ndim > 1 and self.ydata.shape[1] > 1:
+        #     ydata = np.argmax(self.ydata, axis=1)
+        #     #ydata = self.ydata.idxmax(axis=1)
+        # else:
+        #     ydata = self.ydata
+        ydata = self.ydata
 
         # Compute predictions
         ref_preds = self.model.predict(self.xdata)
         # if the output is not a vector (e.g., `predict` method in keras predicts the
         # output probability for each class), then take the label of the class with
         # the highest probability
+        # ref_preds = self._adjust_target_var(ref_preds)
         if ref_preds.ndim > 1 and ref_preds.shape[1] > 1:
-            ref_preds = np.argmax(ref_preds, axis=1)
+            ref_preds = np.argmax(ref_preds, axis=1)  # extract class labels
+            #ref_preds = ref_preds.idxmax(axis=1)  # extract class labels
 
         # Compute reference/baseline score (classification or regression)
         if ml_type == 'c':
             self.ml_type = 'c'
             ref_score = f1_score(y_true=ydata, y_pred=ref_preds, average='micro')
-            # ref_score = f1_score(y_true=ydata, y_pred=ref_preds, average='macro')
 
             # TODO: NEW! classification proba
             # Sort data by label TODO: this must be done before everything!
@@ -298,13 +338,17 @@ class PFI:
             # self.ydata = tmp.iloc[:,0].copy()
             # self.xdata = tmp.iloc[:,1:].copy()
             # Compute reference prediction probabilities
+            #classes = np.unique(ydata.values)
+            classes = np.unique(ydata)
+            # ref_preds_p_ = [ref_preds_p[self.ydata.values == cl, cl] for cl in classes]  TODO: single line routine below
             ref_preds_p = self.model.predict_proba(self.xdata)  # [samples, classes]
             ref_preds_p_ = np.zeros((ref_preds_p.shape[0],))    # [samples, ]
-            dd = {}
             for cl in classes:
-                idx = self.ydata.values == cl
-                dd[cl] = ref_preds_p[idx, cl].mean()
+                #idx = ydata.values == cl
+                idx = ydata == cl
+                idx = idx.reshape(-1,)
                 ref_preds_p_[idx] = ref_preds_p[idx, cl]
+
             ref_preds_p_ = ref_preds_p_.reshape(-1, 1)
             # each value in ref_preds_p_ contains the pred probability for the correct label 
 
@@ -318,15 +362,8 @@ class PFI:
 
         # Iter over col sets (col set per node)
         t0 = time.time()
-        pred_arr = np.zeros((self.xdata.shape[0],
-                             len(col_sets),
-                             self.n_shuffles))
-        ##pred_proba = np.zeros((len(np.unique(self.ydata.values)),
-        ##                       len(col_sets),
-        ##                       self.n_shuffles))  # TODO: new for proba
-        pred_arr_p = np.zeros((self.xdata.shape[0],
-                               len(col_sets),
-                               self.n_shuffles))  # TODO: new for proba     
+        pred_arr = np.zeros((self.xdata.shape[0], len(col_sets), self.n_shuffles))
+        pred_arr_p = np.zeros((self.xdata.shape[0], len(col_sets), self.n_shuffles))  # TODO: for proba     
 
         for ci, col_set in enumerate(col_sets):
             col_set_name = ','.join(col_set)
@@ -347,7 +384,7 @@ class PFI:
                 # TODO: NEW!
                 pred_arr_p[:,ci,:] = self._shuf_and_pred_proba(col_set)  # TODO: new for proba
 
-                fi_score_pmap[col_set_name] = - pred_arr_p[:,ci,:].mean(axis=1, keepdims=True) + ref_preds_p_
+                fimap[col_set_name] = - pred_arr_p[:,ci,:].mean(axis=1, keepdims=True) + ref_preds_p_
             else:
                 # score_vec = [r2_score(y_true=ydata, y_pred=pred_df.iloc[:, j]) for j in range(pred_df.shape[1])]
                 score_vec = [r2_score(y_true=ydata, y_pred=pred_arr[:,ci,j]) for j in range(pred_arr.shape[2])]
@@ -363,25 +400,8 @@ class PFI:
                 if ci % 100 == 0:
                     print(f'col {ci + 1}/{len(col_sets)}')
 
-        # TODO: NEW__
-        # fi_score_p = pred_arr_p.mean(axis=2)  # [samples, col_sets]
-        # tmp = np.ones(fi_score_p.shape)*-100
-        # for f in range(fi_score_p.shape[1]):
-        #     for cl in classes:
-        #         idx = self.ydata.values == cl
-        #         tmp[idx, f] = preds_p[idx, cl]  # get predictions for class cl
-        # fi_score_p = preds_p - tmp
-        # ref_preds_p - fi_score_p
-
-        fi_score_p = - pred_arr_p.mean(axis=2) + ref_preds_p_
-        fi_score_p = pd.DataFrame(fi_score_p, columns=[','.join(c) for c in col_sets])
-
-        self.pred_arr_p = pred_arr_p
-        self.ref_preds_p_ = ref_preds_p_
-        # TODO: NEW__
-
         self.logger.info(f'Time to compute PFI: {(time.time()-t0)/60:.3f} mins')
-        self.pred_arr = np.around(pred_arr, decimals=3)
+        self.pred_arr = np.around(pred_arr, decimals=5)
 
         # MDA/MDS
         self.fi_score = fi_score.sort_values('imp', ascending=False).reset_index(drop=True)
@@ -394,23 +414,29 @@ class PFI:
         # TODO: NEW
         # MDA/MDS class proba
         if ml_type == 'c':
-            self.fi_score_p = fi_score_p
-            self.fi_score_pmap = fi_score_pmap
+            # Store data related to classification proba
+            # fimap = - pred_arr_p.mean(axis=2) + ref_preds_p_
+            # fimap = pd.DataFrame(fimap, columns=[','.join(c) for c in col_sets])
+            fimap = fimap.loc[:, sorted(fimap.columns)]
+            self.fimap = fimap
+            self.pred_arr_p = np.around(pred_arr_p, decimals=5)  # shuffling predictions (entire 3-d data)
+            self.ref_preds_p_ = ref_preds_p_  # reference predictions
 
 
-    def _plot_fi(self, fi, figsize=(8, 5), plot_direction='h', max_cols=None, title=None):
+    def _plot_fi(self, fi, figsize=(8, 5), plot_direction='h', max_cols_plot=None, title=None):
         """ Plot feature importance.
         Args:
             plot_direction (str) : direction of the bars (`v` for vertical, `h` for hrozontal)
-            max_cols (int) : number of top most important features to plot
+            max_cols_plot (int) : number of top most important features to plot
         Returns:
             fig : handle for plt figure
         """
         # assert hasattr(self, 'fi'), "'fi' attribute is not defined."
         fontsize=14
+        alpha=0.7
 
-        if max_cols and int(max_cols) <= fi.shape[0]:
-            fi = fi.iloc[:int(max_cols), :]
+        if max_cols_plot and int(max_cols_plot) <= fi.shape[0]:
+            fi = fi.iloc[:int(max_cols_plot), :]
 
         fig, ax = plt.subplots(figsize=figsize)
         if title:
@@ -418,9 +444,9 @@ class PFI:
 
         if plot_direction=='v':
             if 'std' in fi.columns.tolist():
-                ax.bar(range(len(fi)), fi['imp'], yerr=fi['std'], align='center', color='b', ecolor='r')
+                ax.bar(range(len(fi)), fi['imp'], color='b', align='center', alpha=alpha, yerr=fi['std'], ecolor='r')
             else:
-                ax.bar(range(len(fi)), fi['imp'], align='center', color='b')
+                ax.bar(range(len(fi)), fi['imp'], color='b', align='center', alpha=alpha)
             ax.set_xticks(range(len(fi)))
             ax.set_xticklabels(fi['cols'], rotation='vertical', fontsize=fontsize)
             ax.set_xlim([-1, len(fi)])
@@ -428,9 +454,9 @@ class PFI:
             ax.set_ylabel('Importance', fontsize=fontsize)
         else:
             if 'std' in fi.columns.tolist():
-                ax.barh(range(len(fi)), fi['imp'], yerr=fi['std'], align='center', color='b', ecolor='r')
+                ax.barh(range(len(fi)), fi['imp'], color='b', align='center', alpha=alpha, yerr=fi['std'], ecolor='r')
             else:
-                ax.barh(range(len(fi)), fi['imp'], align='center', color='b')
+                ax.barh(range(len(fi)), fi['imp'], color='b', align='center', alpha=alpha)
             ax.set_yticks(range(len(fi)))
             ax.set_yticklabels(fi['cols'], rotation='horizontal', fontsize=fontsize)
             ax.set_ylim([-1, len(fi)])
@@ -438,58 +464,95 @@ class PFI:
             ax.set_ylabel('Feature', fontsize=fontsize)
             ax.set_xlabel('Importance', fontsize=fontsize)
 
-        ax.grid()
+        # ax.grid()
+        # plt.tight_layout()
 
         return fig
 
 
-    def plot_var_fi(self, figsize=(8, 5), plot_direction='h', max_cols=None, title=None):
+    def plot_var_fi(self, figsize=(8, 5), plot_direction='h', max_cols_plot=None, title=None):
         """ Plot fi computed using pfi var. """
         fig = self._plot_fi(fi=self.fi_var, figsize=figsize, plot_direction=plot_direction,
-                            max_cols=max_cols, title=title)
+                            max_cols_plot=max_cols_plot, title=title)
         self.fig_fi_var = fig
         return fig
 
 
-    def plot_score_fi(self, figsize=(8, 5), plot_direction='h', max_cols=None, title=None):
+    def plot_score_fi(self, figsize=(8, 5), plot_direction='h', max_cols_plot=None, title=None):
         """ Plot fi computed using pfi score. """
         fig = self._plot_fi(fi=self.fi_score, figsize=figsize, plot_direction=plot_direction,
-                            max_cols=max_cols, title=title)
+                            max_cols_plot=max_cols_plot, title=title)
         self.fig_fi_score = fig
         return fig
 
 
-    def plot_score_fi_p(self, annot=True, figsize=None, max_cols=None, title=None):
+    def plot_fimap(self, figsize=(8, 5), n_top_cols=10, title=None, drop_correlated=True):
         """ Plot heatmap of fi per class.
-        TODO: NEW!
+        TODO: NEW! Not finished
         """
-        if hasattr(self, 'fi_score_p'):
-            fi = self.fi_score_p
+        if hasattr(self, 'fimap'):
+            fimap = self.fimap
+        else:
+            pass  # TODO:
         
-        fontsize = 8
-        if max_cols and int(max_cols) <= fi.shape[0]:
-            fi = fi.iloc[:int(max_cols), :]
+        fontsize=14
+        ydata = self.ydata
+        y_enc = self.y_enc
 
-        mat = fi.sort_values('cols').reset_index(drop=True)
-        mat = mat.set_index('cols')
-        mat = mat.drop(columns=['n'])
-        mat = pd.DataFrame(np.array(mat.values, dtype=float).T,
-                           columns=mat.index, index=mat.columns, dtype=float)
+        if drop_correlated:
+            colsets_to_drop = [c for c in fimap.columns.tolist() if (len(c.split(',')) > 1)]
+            fimap = fimap.drop(columns=colsets_to_drop)
 
-        if figsize is None:
-            sc_x, sc_y = 0.5, 0.5
-            figsize = sc_x * mat.shape[1], sc_y * mat.shape[0]
+        # Add the label code and label name columns
+        # TODO: make it more general (list or array)
+        y_enc_dict = {y_enc.loc[i, 'code']: y_enc.loc[i, 'label'] for i in range(len(y_enc))}
+        fimap.insert(loc=0, column='y', value=ydata)
+        fimap.insert(loc=1, column='label', value=[y_enc_dict[c] for c in ydata])
 
-        fig, ax = plt.subplots(figsize=(sc_x * mat.shape[1], sc_y * mat.shape[0]))
-        sns.heatmap(mat, annot=annot, annot_kws={"size": 8}, fmt='.2f',
-                    linewidths=0.99, linecolor='white',  cmap='coolwarm')
-        ax.set_ylabel('Class', fontsize=fontsize)
-        ax.set_xlabel('Feature', fontsize=fontsize)
+        # Create dict that contains fimap per label
+        fimap_label_dict = {c: fimap[ydata==c].reset_index(drop=True) for c in np.unique(fimap['y'])}
 
+        # Extract the n_top_cols most important features per label 
+        n_top_cols = 10      # get this number of top most important cols per label
+        top_cols_union = []  # contains the union of top most important cols per label
+        df_fi_top_cols = pd.DataFrame(index=range(len(fimap_label_dict)),
+                                      columns=['y', 'label'] + ['f'+str(n) for n in range(len(fimap_label_dict))])
+
+        for i, (c, mp) in enumerate(fimap_label_dict.items()):
+            fi_tmp = mp.iloc[:,2:].median(axis=0).sort_values(ascending=False)
+            #fi_tmp = mp.iloc[:,2:].mean(axis=0).sort_values(ascending=False)
+            #fi_tmp = mp.iloc[:,2:].sum(axis=0).sort_values(ascending=False)
+            top_cols_union.extend(fi_tmp[:n_top_cols].index)
+            df_fi_top_cols.loc[i,'y'] = c
+            df_fi_top_cols.loc[i,'label'] = y_enc_dict[c]
+            df_fi_top_cols.iloc[i,2:] = fi_tmp[:n_top_cols].index
+
+        top_cols_union = set(top_cols_union)
+
+        # Keep the top_cols in the fimap
+        fimap_top = fimap[['y', 'label'] + sorted(list(top_cols_union))].copy()        
+
+        # Average importance for each feature and label
+        fimap_top_label = fimap_top.groupby(by=['y', 'label']).agg(np.median).reset_index()
+        # fimap_top_label = fimap_top.groupby(by=['y', 'type']).agg(np.mean).reset_index()
+        # fimap_top_label = fimap_top.groupby(by=['y', 'type']).agg(np.sum).reset_index()
+
+        # Prepare df for plot
+        map_plot = fimap_top_label.drop(columns='y')
+        map_plot = map_plot.set_index('label')
+        map_plot.index.name = ''
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(map_plot, cmap='Blues', linewidths=0.1, linecolor='white', xticklabels=map_plot.columns)
+        # ax.set_xticks(range(len(map_plot.columns)))
+        # ax.set_xticklabels(map_plot.columns, rotation='vertical', fontsize=fontsize)
+        [tick.label.set_fontsize(fontsize) for tick in ax.yaxis.get_major_ticks()]
+        [tick.label.set_fontsize(8) for tick in ax.xaxis.get_major_ticks()]
+        
         if title:
             ax.set_title(title)
 
-        self.fig_fi_p = fig
+        self.fig_fimap = fig
         return fig        
 
 
@@ -500,16 +563,14 @@ class PFI:
         if name:
             var_filename = name + '_fi_var' + '.csv'
             score_filename = name + '_fi_score' + '.csv'
-            score_p_filename = name + '_fi_score_p' + '.csv'  # TODO: NEW
-            score_pmap_filename = name + '_fi_score_pmap' + '.csv'  # TODO: NEW
+            score_pmap_filename = name + '_fimap' + '.csv'  # TODO: NEW
             colset_filename = name + '_colsets' + '.json'
             clique_filename = name + '_cliques' + '.json'
             pred_filename = name + '_pred'
         else:
             var_filename = 'fi_var.csv'
             score_filename = 'fi_score.csv'
-            score_p_filename = 'fi_score_p.csv'  # TODO: NEW
-            score_pmap_filename = 'fi_score_pmap.csv'  # TODO: NEW
+            score_pmap_filename = 'fimap.csv'  # TODO: NEW
             colset_filename = 'colsets.json'
             clique_filename = 'cliques.json'
             pred_filename = 'pred'
@@ -525,14 +586,10 @@ class PFI:
         
         if hasattr(self, 'fi_score'):
             self.fi_score.to_csv(os.path.join(path, score_filename), index=False)
-
-        # TODO: NEW
-        if hasattr(self, 'fi_score_p'):
-            self.fi_score_p.to_csv(os.path.join(path, score_p_filename), index=False)
         
         # TODO: NEW
-        if hasattr(self, 'fi_score_pmap'):
-            self.fi_score_pmap.to_csv(os.path.join(path, score_pmap_filename), index=False)            
+        if hasattr(self, 'fimap'):
+            self.fimap.to_csv(os.path.join(path, score_pmap_filename), index=False)            
 
         # np.save(os.path.join(path, pred_filename+'.npy'), self.pred, allow_pickle=False)
         # np.savez_compressed(os.path.join(path, pred_filename+'.npz'), self.pred)
